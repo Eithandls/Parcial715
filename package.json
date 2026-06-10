@@ -1,0 +1,15 @@
+{
+  "name": "cinema-club",
+  "version": "1.0.0",
+  "description": "Cinema Club - Sistema de Renta de Peliculas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5"
+  }
+}

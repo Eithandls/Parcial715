@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cinema Club — Renta de Películas</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Login Screen -->
+  <div id="login-screen" class="hidden">
+    <div class="login-card" id="login-card">
+      <div class="login-header">
+        <span class="material-symbols-outlined login-logo">movie</span>
+        <h1>Cinema Club</h1>
+        <p>Acceso al Sistema</p>
+      </div>
+      <form id="login-form">
+        <div class="form-group">
+          <label>Usuario</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">person</span>
+            <input type="text" id="login-username" required placeholder="Tu usuario">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">lock</span>
+            <input type="password" id="login-password" required placeholder="Tu contraseña">
+          </div>
+        </div>
+        <div id="login-error" class="text-error mb-sm text-center font-semibold"></div>
+        <button type="submit" class="btn btn-primary w-full">Ingresar</button>
+        <div class="text-center mt-md">
+          <a href="#" onclick="App.toggleRegister(event)" style="color: var(--primary); font-weight: 600; text-decoration: none;">¿No tienes cuenta? Regístrate</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- Register Card -->
+    <div class="login-card hidden" id="register-card">
+      <div class="login-header" style="margin-bottom: 24px;">
+        <span class="material-symbols-outlined login-logo" style="font-size: 36px;">person_add</span>
+        <h1>Crear Cuenta</h1>
+        <p>Únete a Cinema Club</p>
+      </div>
+      <form id="register-form">
+        <div class="form-group">
+          <label>Nombre Completo</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">badge</span>
+            <input type="text" id="reg-nombre" required placeholder="Ej: Juan Pérez">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Correo Electrónico</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">mail</span>
+            <input type="email" id="reg-email" required placeholder="tu@correo.com">
+          </div>
+        </div>
+        <div class="grid-2" style="gap:12px;">
+          <div class="form-group">
+            <label>Cédula</label>
+            <div class="input-with-icon">
+              <span class="material-symbols-outlined">badge</span>
+              <input type="text" id="reg-cedula" placeholder="000-0000000-0">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Teléfono</label>
+            <div class="input-with-icon">
+              <span class="material-symbols-outlined">phone</span>
+              <input type="text" id="reg-telefono" placeholder="809-000-0000">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Usuario</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">person</span>
+            <input type="text" id="reg-username" required placeholder="Elige un usuario">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <div class="input-with-icon">
+            <span class="material-symbols-outlined">lock</span>
+            <input type="password" id="reg-password" required placeholder="Tu contraseña">
+          </div>
+        </div>
+        <input type="hidden" name="reg-rol" value="cliente">
+        <div id="register-error" class="text-error mb-sm text-center font-semibold"></div>
+        <button type="submit" class="btn btn-primary w-full">Registrar y Entrar</button>
+        <div class="text-center mt-md">
+          <a href="#" onclick="App.toggleRegister(event)" style="color: var(--primary); font-weight: 600; text-decoration: none;">¿Ya tienes cuenta? Ingresa aquí</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div id="app-shell" class="hidden">
+    <aside id="sidebar"></aside>
+    <div class="main-wrapper">
+      <header id="topbar"></header>
+      <main id="content"></main>
+    </div>
+  </div>
+
+  <div id="modal-container"></div>
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/api.js"></script>
+  <script src="js/components.js"></script>
+
+  <!-- Main App (load before pages so App.registerPage exists) -->
+  <script src="js/app.js"></script>
+
+  <!-- Pages -->
+  <script src="js/pages/dashboard.js"></script>
+  <script src="js/pages/tipos-articulo.js"></script>
+  <script src="js/pages/elenco.js"></script>
+  <script src="js/pages/generos.js"></script>
+  <script src="js/pages/idiomas.js"></script>
+  <script src="js/pages/articulos.js"></script>
+  <script src="js/pages/clientes.js"></script>
+  <script src="js/pages/empleados.js"></script>
+  <script src="js/pages/rentas.js"></script>
+  <script src="js/pages/peliculas.js"></script>
+  <script src="js/pages/reservas.js"></script>
+  <script src="js/pages/consultas.js"></script>
+  <script src="js/pages/reportes.js"></script>
+  <script src="js/pages/catalogo.js"></script>
+  <script src="js/pages/mis-rentas.js"></script>
+  <script src="js/pages/mis-reservas.js"></script>
+  
+</body>
+</html>
