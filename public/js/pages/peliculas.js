@@ -478,13 +478,14 @@ App.registerPage('peliculas', async (container) => {
             <option value="">Todos</option>
           </select>
         </div>
-        <button class="btn btn-primary" onclick="loadData()">
+        <button class="btn btn-primary" onclick="window.Peliculas.loadData()">
           <span class="material-symbols-outlined">search</span> Buscar
         </button>
       </div>
     </div>
     <div id="peliculas-table-container">${Components.loading()}</div>
   `;
+  window.Peliculas.loadData = loadData;
 
   // Populate filter dropdowns
   await loadRefs();

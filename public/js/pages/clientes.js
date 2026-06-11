@@ -119,14 +119,30 @@ App.registerPage('clientes', async (container) => {
     edit(id) { this.showForm(id); },
     
     async delete(id) {
-      if (await Components.confirm('¿Estás seguro de eliminar este cliente?')) {
-        try {
-          await API.remove('clientes', id);
-          Components.showToast('Eliminado correctamente');
-          loadData();
-        } catch (e) {
-          Components.showToast(e.message, 'error');
-        }
+      const confirmHtml = `
+        <div style="text-align:center; padding:12px 0;">
+          <span class="material-symbols-outlined" style="font-size:48px; color:var(--error); margin-bottom:12px;">warning</span>
+          <h4 style="margin-bottom:8px;">¿Eliminar este cliente?</h4>
+          <p class="text-muted">Esta acción no se puede deshacer. Se borrará permanentemente de la base de datos.</p>
+          <p class="text-muted" style="margin-top:8px; font-size:13px;">Si solo quieres desactivarlo, usa la opción <b>Inactivo</b> en el formulario de edición.</p>
+        </div>
+      `;
+      Components.showModal('Confirmar Eliminación', confirmHtml, `
+        <button class="btn btn-outline" onclick="Components.closeModal()">Cancelar</button>
+        <button class="btn btn-error" onclick="window.Clientes.confirmarDelete(${id})">
+          <span class="material-symbols-outlined">delete_forever</span> Sí, eliminar permanentemente
+        </button>
+      `);
+    },
+
+    async confirmarDelete(id) {
+      try {
+        await API.request('DELETE', `/api/clientes/${id}/permanente`);
+        Components.closeModal();
+        Components.showToast('Cliente eliminado permanentemente');
+        loadData();
+      } catch (e) {
+        Components.showToast(e.message, 'error');
       }
     }
   };
@@ -140,10 +156,11 @@ App.registerPage('clientes', async (container) => {
     <div class="card mb-md">
       <div class="input-with-icon" style="max-width:300px;">
         <span class="material-symbols-outlined">search</span>
-        <input type="text" placeholder="Buscar por nombre..." oninput="clearTimeout(window._to); window._to=setTimeout(()=>loadData(this.value), 300)">
+        <input type="text" placeholder="Buscar por nombre..." oninput="clearTimeout(window._to); window._to=setTimeout(()=>window.Clientes.loadData(this.value), 300)">
       </div>
     </div>
     <div id="clientes-table-container">${Components.loading()}</div>
   `;
+  window.Clientes.loadData = loadData;
   loadData();
 });

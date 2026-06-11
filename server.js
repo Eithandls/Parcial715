@@ -315,6 +315,38 @@ app.post('/api/peliculas/completo', (req, res) => {
   }
 });
 
+// Client hard delete (before generic CRUD to take precedence)
+app.delete('/api/clientes/:id/permanente', (req, res) => {
+  try {
+    const clienteId = req.params.id;
+
+    // Check if client exists
+    const cliente = db.prepare('SELECT id, nombre, apellido FROM clientes WHERE id = ?').get(clienteId);
+    if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+    // Check for active rentals
+    const activas = db.prepare('SELECT COUNT(*) as count FROM rentas WHERE cliente_id = ? AND estado = ?').get(clienteId, 'Activa');
+    if (activas.count > 0) {
+      return res.status(400).json({ error: `El cliente tiene ${activas.count} renta(s) activa(s). Debe devolver los artículos primero.` });
+    }
+
+    db.transaction(() => {
+      // Delete returned rentals
+      db.prepare('DELETE FROM rentas WHERE cliente_id = ? AND estado = ?').run(clienteId, 'Devuelta');
+      // Delete reservations
+      db.prepare('DELETE FROM reservas WHERE cliente_id = ?').run(clienteId);
+      // Delete the login user account
+      db.prepare('DELETE FROM usuarios WHERE email = ?').run(cliente.email);
+      // Delete the client
+      db.prepare('DELETE FROM clientes WHERE id = ?').run(clienteId);
+    })();
+
+    res.json({ success: true, message: `Cliente "${cliente.nombre} ${cliente.apellido}" eliminado permanentemente` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Generate basic CRUD (reservas excluded — has custom handler)
 ['tipos_articulo', 'elenco', 'generos', 'idiomas', 'clientes', 'empleados', 'peliculas'].forEach(table => generateCRUD(app, table));
 
@@ -795,7 +827,7 @@ app.get('/api/mis-rentas', (req, res) => {
       SELECT r.*, a.titulo as articulo_titulo
       FROM rentas r
       JOIN articulos a ON r.articulo_id = a.id
-      WHERE r.cliente_id = ?
+      WHERE r.cliente_id = ? AND r.estado != 'Devuelta'
       ORDER BY r.id DESC
     `).all(cliente.id);
     res.json(rows);
