@@ -3,7 +3,13 @@ const cors = require('cors');
 const { db } = require('./database');
 const path = require('path');
 const { hashPassword, verifyPassword, createToken, canAccessRoute } = require('./security');
-const { ValidationError, validateBody, validateDateRange } = require('./validation');
+const {
+  ValidationError,
+  validateBody,
+  validateDateRange,
+  formatDominicanCedula,
+  isValidDominicanCedula
+} = require('./validation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -132,7 +138,8 @@ app.post('/api/auth/register', (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
-  const cedula = String(req.body?.cedula || '').trim() || null;
+  const cedulaInput = String(req.body?.cedula || '').trim();
+  const cedula = cedulaInput ? formatDominicanCedula(cedulaInput) : null;
   const telefono = String(req.body?.telefono || '').trim() || null;
 
   const errors = [];
@@ -141,7 +148,7 @@ app.post('/api/auth/register', (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Correo no tiene un formato válido');
   if (!/^[A-Za-z0-9._-]{3,30}$/.test(username)) errors.push('Usuario debe tener de 3 a 30 caracteres y solo usar letras, números, punto, guion o guion bajo');
   if (password.length < 6 || password.length > 72) errors.push('Contraseña debe tener entre 6 y 72 caracteres');
-  if (cedula && !/^\d{3}-\d{7}-\d$/.test(cedula)) errors.push('Cédula debe usar el formato 000-0000000-0');
+  if (cedula && !isValidDominicanCedula(cedula)) errors.push('Cédula dominicana no es válida; revisa el número y su dígito verificador');
   if (telefono && !/^\d{3}-\d{3}-\d{4}$/.test(telefono)) errors.push('Teléfono debe usar el formato 809-000-0000');
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 

@@ -36,6 +36,7 @@ El servidor corre en `http://localhost:3000`.
   - **Empleado:** operación diaria, sin gestión de empleados ni reportes administrativos.
   - **Cliente:** catálogo, autoservicio de rentas y sus propios historiales y reservas.
 - La API valida campos obligatorios, formatos, rangos, estados y relaciones antes de guardar.
+- Las cédulas se enmascaran como `000-0000000-0` y se comprueba su dígito verificador dominicano tanto en el navegador como en la API.
 
 ## Estructura del proyecto
 

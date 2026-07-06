@@ -163,6 +163,7 @@ const Components = {
         </div>
       </div>
     `;
+    if (window.Validators) Validators.attachCedulaMasks(container);
     
     document.getElementById('current-modal-overlay').addEventListener('click', () => {
       // Components.closeModal(); // Optional: close on overlay click

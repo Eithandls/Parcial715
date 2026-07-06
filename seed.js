@@ -211,16 +211,16 @@ db.transaction(() => {
 
   // Clientes
   const insertCliente = db.prepare(`INSERT INTO clientes (nombre, apellido, cedula, telefono, email, direccion) VALUES (?, ?, ?, ?, ?, ?)`);
-  const c1 = insertCliente.run('Carlos', 'Pérez', '402-1234567-1', '809-555-0001', 'carlos@email.com', 'Ensanche Naco').lastInsertRowid;
-  const c2 = insertCliente.run('María', 'Gómez', '001-9876543-2', '809-555-0002', 'maria@email.com', 'Piantini').lastInsertRowid;
-  const c3 = insertCliente.run('José', 'Rodríguez', '031-4567890-3', '829-555-0003', 'jose@email.com', 'Gazcue').lastInsertRowid;
-  const c4 = insertCliente.run('Ana', 'Martínez', '402-3334445-4', '849-555-0004', 'ana@email.com', 'Los Cacicazgos').lastInsertRowid;
-  const c5 = insertCliente.run('Luis', 'Fernández', '001-2223334-5', '809-555-0005', 'luis@email.com', 'Bella Vista').lastInsertRowid;
+  const c1 = insertCliente.run('Carlos', 'Pérez', '402-1234567-8', '809-555-0001', 'carlos@email.com', 'Ensanche Naco').lastInsertRowid;
+  const c2 = insertCliente.run('María', 'Gómez', '001-9876543-0', '809-555-0002', 'maria@email.com', 'Piantini').lastInsertRowid;
+  const c3 = insertCliente.run('José', 'Rodríguez', '031-4567890-4', '829-555-0003', 'jose@email.com', 'Gazcue').lastInsertRowid;
+  const c4 = insertCliente.run('Ana', 'Martínez', '402-3334445-2', '849-555-0004', 'ana@email.com', 'Los Cacicazgos').lastInsertRowid;
+  const c5 = insertCliente.run('Luis', 'Fernández', '001-2223334-9', '809-555-0005', 'luis@email.com', 'Bella Vista').lastInsertRowid;
 
   // Empleados
   const insertEmpleado = db.prepare(`INSERT INTO empleados (nombre, apellido, cedula, cargo, tanda, porciento_comision, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-  const em1 = insertEmpleado.run('Juan', 'López', '402-0001112-1', 'Cajero', 'Matutina', 5, '2023-01-15').lastInsertRowid;
-  const em2 = insertEmpleado.run('Carmen', 'Sánchez', '001-1112223-2', 'Cajero', 'Vespertina', 5, '2023-03-20').lastInsertRowid;
+  const em1 = insertEmpleado.run('Juan', 'López', '402-0001112-6', 'Cajero', 'Matutina', 5, '2023-01-15').lastInsertRowid;
+  const em2 = insertEmpleado.run('Carmen', 'Sánchez', '001-1112223-0', 'Cajero', 'Vespertina', 5, '2023-03-20').lastInsertRowid;
   const em3 = insertEmpleado.run('Pedro', 'Díaz', '031-2223334-3', 'Gerente', 'Nocturna', 10, '2022-11-01').lastInsertRowid;
 
   // Rentas (afectan disponibilidad de algunos formatos)

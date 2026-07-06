@@ -10,6 +10,26 @@ class ValidationError extends Error {
 const currentYear = new Date().getFullYear();
 const STATES = ['Activo', 'Inactivo'];
 
+function formatDominicanCedula(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 10)}-${digits.slice(10)}`;
+}
+
+function isValidDominicanCedula(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  const weights = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+  const sum = weights.reduce((total, weight, index) => {
+    const product = Number(digits[index]) * weight;
+    return total + (product >= 10 ? product - 9 : product);
+  }, 0);
+  const verifier = (10 - (sum % 10)) % 10;
+  return verifier === Number(digits[10]);
+}
+
 const schemas = {
   tipos_articulo: {
     descripcion: { required: true, type: 'string', min: 2, max: 80, label: 'Descripción' },
@@ -31,7 +51,7 @@ const schemas = {
   clientes: {
     nombre: { required: true, type: 'string', min: 2, max: 80, label: 'Nombre' },
     apellido: { required: true, type: 'string', min: 2, max: 80, label: 'Apellido' },
-    cedula: { type: 'pattern', pattern: /^\d{3}-\d{7}-\d$/, max: 13, nullable: true, label: 'Cédula', hint: 'debe usar el formato 000-0000000-0' },
+    cedula: { type: 'dominicanCedula', nullable: true, label: 'Cédula' },
     telefono: { type: 'pattern', pattern: /^\d{3}-\d{3}-\d{4}$/, max: 12, nullable: true, label: 'Teléfono', hint: 'debe usar el formato 809-000-0000' },
     email: { type: 'email', max: 160, nullable: true, label: 'Correo' },
     direccion: { type: 'string', max: 240, nullable: true, label: 'Dirección' },
@@ -41,7 +61,7 @@ const schemas = {
   empleados: {
     nombre: { required: true, type: 'string', min: 2, max: 80, label: 'Nombre' },
     apellido: { required: true, type: 'string', min: 2, max: 80, label: 'Apellido' },
-    cedula: { type: 'pattern', pattern: /^\d{3}-\d{7}-\d$/, nullable: true, label: 'Cédula', hint: 'debe usar el formato 000-0000000-0' },
+    cedula: { type: 'dominicanCedula', nullable: true, label: 'Cédula' },
     cargo: { type: 'string', min: 2, max: 80, nullable: true, label: 'Cargo' },
     tanda: { type: 'enum', values: ['Matutina', 'Vespertina', 'Nocturna'], nullable: true, label: 'Tanda' },
     porciento_comision: { type: 'number', min: 0, max: 100, label: 'Comisión' },
@@ -107,6 +127,9 @@ function validateField(key, value, rule, errors) {
     value = value.toLowerCase();
   } else if (rule.type === 'pattern') {
     if (!rule.pattern.test(value)) errors.push(`${label} ${rule.hint || 'no tiene un formato válido'}`);
+  } else if (rule.type === 'dominicanCedula') {
+    value = formatDominicanCedula(value);
+    if (!isValidDominicanCedula(value)) errors.push(`${label} dominicana no es válida; revisa el número y su dígito verificador`);
   } else if (rule.type === 'date') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00`))) {
       errors.push(`${label} no es una fecha válida`);
@@ -147,4 +170,10 @@ function validateDateRange(from, to) {
   if (from && to && from > to) throw new ValidationError(['Fecha desde no puede ser posterior a fecha hasta']);
 }
 
-module.exports = { ValidationError, validateBody, validateDateRange };
+module.exports = {
+  ValidationError,
+  validateBody,
+  validateDateRange,
+  formatDominicanCedula,
+  isValidDominicanCedula
+};

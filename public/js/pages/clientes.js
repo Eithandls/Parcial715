@@ -50,7 +50,8 @@ App.registerPage('clientes', async (container) => {
           <div class="grid-2 mb-sm">
             <div class="form-group">
               <label>Cédula</label>
-              <input type="text" id="cli-cedula" class="form-control" pattern="[0-9]{3}-[0-9]{7}-[0-9]" maxlength="13" value="${data.cedula || ''}" placeholder="000-0000000-0">
+              <input type="text" id="cli-cedula" data-cedula inputmode="numeric" class="form-control" maxlength="13" value="${data.cedula || ''}" placeholder="000-0000000-0">
+              <small class="text-muted">Se valida el dígito verificador dominicano.</small>
             </div>
             <div class="form-group">
               <label>Teléfono</label>
