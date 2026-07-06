@@ -6,6 +6,7 @@ const {
   formatDominicanCedula,
   isValidDominicanCedula
 } = require('../validation');
+const { db } = require('../database');
 
 const passwordHash = hashPassword('clave-segura');
 assert.equal(verifyPassword('clave-segura', passwordHash), true);
@@ -42,5 +43,8 @@ assert.throws(() => validateBody('empleados', {
   porciento_comision: 200
 }), /menor o igual a 100/);
 assert.throws(() => validateDateRange('2026-08-01', '2026-07-01'), /posterior/);
+
+const employeeColumns = db.prepare('PRAGMA table_info(empleados)').all().map(column => column.name);
+assert.equal(employeeColumns.includes('usuario_id'), true);
 
 console.log('Security and validation tests passed');

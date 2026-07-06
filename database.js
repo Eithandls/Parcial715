@@ -5,6 +5,18 @@ const dbPath = path.join(__dirname, 'cinema_club.db');
 const db = new Database(dbPath);
 db.pragma('foreign_keys = ON');
 
+function migrateExistingDB() {
+  const hasEmployees = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'empleados'").get();
+  if (!hasEmployees) return;
+  const columns = db.prepare('PRAGMA table_info(empleados)').all();
+  if (!columns.some(column => column.name === 'usuario_id')) {
+    db.exec('ALTER TABLE empleados ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)');
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_empleados_usuario_id ON empleados(usuario_id) WHERE usuario_id IS NOT NULL');
+}
+
+migrateExistingDB();
+
 function initDB() {
   db.exec(`
     -- Users for login
@@ -104,6 +116,7 @@ function initDB() {
 
     CREATE TABLE IF NOT EXISTS empleados (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER UNIQUE,
       nombre TEXT NOT NULL,
       apellido TEXT NOT NULL,
       cedula TEXT UNIQUE,
@@ -112,7 +125,8 @@ function initDB() {
       porciento_comision REAL DEFAULT 0,
       fecha_ingreso DATE,
       estado TEXT DEFAULT 'Activo',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
     );
 
     CREATE TABLE IF NOT EXISTS rentas (
@@ -146,6 +160,9 @@ function initDB() {
       FOREIGN KEY (cliente_id) REFERENCES clientes(id),
       FOREIGN KEY (articulo_id) REFERENCES articulos(id)
     );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_empleados_usuario_id
+      ON empleados(usuario_id) WHERE usuario_id IS NOT NULL;
   `);
   console.log('Database initialized successfully.');
 }

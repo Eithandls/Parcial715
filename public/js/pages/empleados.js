@@ -7,6 +7,7 @@ App.registerPage('empleados', async (container) => {
         { key: 'nombre', label: 'Empleado', render: (v, r) => `${v} ${r.apellido}` },
         { key: 'cedula', label: 'Cédula' },
         { key: 'cargo', label: 'Cargo' },
+        { key: 'username', label: 'Usuario', render: v => v || '<span class="text-muted">Sin acceso</span>' },
         { key: 'tanda', label: 'Tanda' },
         { key: 'estado', label: 'Estado', render: Components.badge },
         { key: 'acciones', label: 'Acciones', render: (_, r) => `
@@ -28,7 +29,7 @@ App.registerPage('empleados', async (container) => {
 
   window.Empleados = {
     async showForm(id = null) {
-      let data = { nombre: '', apellido: '', cedula: '', cargo: '', tanda: 'Matutina', porciento_comision: 0, fecha_ingreso: '', estado: 'Activo' };
+      let data = { nombre: '', apellido: '', cedula: '', cargo: '', tanda: 'Matutina', porciento_comision: 0, fecha_ingreso: '', estado: 'Activo', usuario_id: null, username: '', acceso_email: '' };
       if (id) {
         try { data = await API.getOne('empleados', id); } 
         catch (e) { return Components.showToast('Error', 'error'); }
@@ -86,6 +87,26 @@ App.registerPage('empleados', async (container) => {
             </select>
           </div>
 
+          <hr style="margin:20px 0; border:none; border-top:1px solid var(--outline-variant);">
+          <h4 style="margin-bottom:12px; color:var(--primary); display:flex; align-items:center; gap:8px;">
+            <span class="material-symbols-outlined">login</span> Acceso al sistema
+          </h4>
+          <div class="grid-2 mb-sm">
+            <div class="form-group">
+              <label>Usuario</label>
+              <input type="text" id="emp-username" class="form-control" required minlength="3" maxlength="30" pattern="[A-Za-z0-9._-]+" autocomplete="username" value="${data.username || ''}" placeholder="Ej: jperez">
+            </div>
+            <div class="form-group">
+              <label>Correo de acceso</label>
+              <input type="email" id="emp-email" class="form-control" required maxlength="160" autocomplete="email" value="${data.acceso_email || ''}" placeholder="empleado@correo.com">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Contraseña ${data.usuario_id ? '(dejar vacía para conservar la actual)' : ''}</label>
+            <input type="password" id="emp-password" class="form-control" ${data.usuario_id ? '' : 'required'} minlength="6" maxlength="72" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+            <small class="text-muted">Esta cuenta se creará automáticamente con rol empleado.</small>
+          </div>
+
           <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
             <button type="button" class="btn btn-outline" onclick="Components.closeModal()">Cancelar</button>
             <button type="submit" class="btn btn-primary">Guardar</button>
@@ -104,13 +125,16 @@ App.registerPage('empleados', async (container) => {
         tanda: document.getElementById('emp-tanda').value,
         porciento_comision: document.getElementById('emp-comision').value,
         fecha_ingreso: document.getElementById('emp-fecha').value,
-        estado: document.getElementById('emp-estado').value
+        estado: document.getElementById('emp-estado').value,
+        username: document.getElementById('emp-username').value,
+        email: document.getElementById('emp-email').value,
+        password: document.getElementById('emp-password').value
       };
       try {
         if (id) await API.update('empleados', id, data);
         else await API.create('empleados', data);
         Components.closeModal();
-        Components.showToast('Guardado correctamente');
+        Components.showToast(id ? 'Empleado y acceso actualizados' : 'Empleado y usuario creados correctamente');
         loadData();
       } catch (e) {
         Components.showToast(e.message, 'error');

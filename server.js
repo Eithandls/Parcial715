@@ -488,8 +488,151 @@ app.delete('/api/clientes/:id/permanente', (req, res) => {
   }
 });
 
-// Generate basic CRUD (reservas excluded — has custom handler)
-['tipos_articulo', 'elenco', 'generos', 'idiomas', 'clientes', 'empleados', 'peliculas'].forEach(table => generateCRUD(app, table));
+// Employees + access account are managed together.
+const employeeFields = ['nombre', 'apellido', 'cedula', 'cargo', 'tanda', 'porciento_comision', 'fecha_ingreso', 'estado'];
+
+function employeeDataFromBody(body) {
+  return Object.fromEntries(employeeFields.filter(field => body[field] !== undefined).map(field => [field, body[field]]));
+}
+
+function validateEmployeeAccess(body, passwordRequired) {
+  const username = String(body.username || '').trim();
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const errors = [];
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(username)) errors.push('Usuario debe tener de 3 a 30 caracteres y solo usar letras, números, punto, guion o guion bajo');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160) errors.push('Correo de acceso no tiene un formato válido');
+  if (passwordRequired && password.length < 6) errors.push('Contraseña debe tener al menos 6 caracteres');
+  if (password.length > 72) errors.push('Contraseña no puede superar 72 caracteres');
+  if (errors.length) throw new ValidationError(errors);
+  return { username, email, password };
+}
+
+app.get('/api/empleados', (req, res) => {
+  const search = String(req.query.search || '').trim();
+  try {
+    const params = [];
+    let where = "WHERE e.estado != 'Eliminado'";
+    if (search) {
+      where += ' AND (e.nombre LIKE ? OR e.apellido LIKE ? OR e.cedula LIKE ? OR u.username LIKE ?)';
+      for (let i = 0; i < 4; i++) params.push(`%${search}%`);
+    }
+    const rows = db.prepare(`
+      SELECT e.*, u.username, u.email as acceso_email
+      FROM empleados e
+      LEFT JOIN usuarios u ON e.usuario_id = u.id
+      ${where}
+      ORDER BY e.id DESC
+    `).all(...params);
+    res.json(rows);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.get('/api/empleados/:id', (req, res) => {
+  try {
+    const row = db.prepare(`
+      SELECT e.*, u.username, u.email as acceso_email
+      FROM empleados e
+      LEFT JOIN usuarios u ON e.usuario_id = u.id
+      WHERE e.id = ?
+    `).get(positiveId(req.params.id, 'Empleado'));
+    if (!row) return res.status(404).json({ error: 'Empleado no encontrado' });
+    res.json(row);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.post('/api/empleados', (req, res) => {
+  try {
+    const employee = validateBody('empleados', employeeDataFromBody(req.body));
+    const access = validateEmployeeAccess(req.body, true);
+    let employeeId;
+    let userId;
+
+    db.transaction(() => {
+      const userInfo = db.prepare(`
+        INSERT INTO usuarios (username, password, nombre, email, rol, estado)
+        VALUES (?, ?, ?, ?, 'empleado', ?)
+      `).run(access.username, hashPassword(access.password), `${employee.nombre} ${employee.apellido}`, access.email, employee.estado || 'Activo');
+      userId = userInfo.lastInsertRowid;
+
+      const employeeInfo = db.prepare(`
+        INSERT INTO empleados (usuario_id, nombre, apellido, cedula, cargo, tanda, porciento_comision, fecha_ingreso, estado)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(userId, employee.nombre, employee.apellido, employee.cedula, employee.cargo, employee.tanda,
+        employee.porciento_comision, employee.fecha_ingreso, employee.estado || 'Activo');
+      employeeId = employeeInfo.lastInsertRowid;
+    })();
+
+    res.status(201).json({ id: employeeId, usuario_id: userId, username: access.username, ...employee });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.put('/api/empleados/:id', (req, res) => {
+  try {
+    const employeeId = positiveId(req.params.id, 'Empleado');
+    const current = db.prepare(`
+      SELECT e.*, u.username, u.email as acceso_email
+      FROM empleados e
+      LEFT JOIN usuarios u ON e.usuario_id = u.id
+      WHERE e.id = ?
+    `).get(employeeId);
+    if (!current) return res.status(404).json({ error: 'Empleado no encontrado' });
+
+    const employee = validateBody('empleados', employeeDataFromBody(req.body));
+    const access = validateEmployeeAccess(req.body, !current.usuario_id);
+
+    db.transaction(() => {
+      let userId = current.usuario_id;
+      if (!userId) {
+        const info = db.prepare(`
+          INSERT INTO usuarios (username, password, nombre, email, rol, estado)
+          VALUES (?, ?, ?, ?, 'empleado', ?)
+        `).run(access.username, hashPassword(access.password), `${employee.nombre} ${employee.apellido}`, access.email, employee.estado || 'Activo');
+        userId = info.lastInsertRowid;
+      } else if (access.password) {
+        db.prepare('UPDATE usuarios SET username=?, email=?, nombre=?, password=?, estado=? WHERE id=? AND rol=?')
+          .run(access.username, access.email, `${employee.nombre} ${employee.apellido}`, hashPassword(access.password), employee.estado || 'Activo', userId, 'empleado');
+      } else {
+        db.prepare('UPDATE usuarios SET username=?, email=?, nombre=?, estado=? WHERE id=? AND rol=?')
+          .run(access.username, access.email, `${employee.nombre} ${employee.apellido}`, employee.estado || 'Activo', userId, 'empleado');
+      }
+
+      db.prepare(`
+        UPDATE empleados SET usuario_id=?, nombre=?, apellido=?, cedula=?, cargo=?, tanda=?,
+          porciento_comision=?, fecha_ingreso=?, estado=? WHERE id=?
+      `).run(userId, employee.nombre, employee.apellido, employee.cedula, employee.cargo, employee.tanda,
+        employee.porciento_comision, employee.fecha_ingreso, employee.estado || 'Activo', employeeId);
+    })();
+
+    res.json({ id: employeeId, username: access.username, ...employee });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+app.delete('/api/empleados/:id', (req, res) => {
+  try {
+    const employeeId = positiveId(req.params.id, 'Empleado');
+    const current = db.prepare('SELECT usuario_id FROM empleados WHERE id = ?').get(employeeId);
+    if (!current) return res.status(404).json({ error: 'Empleado no encontrado' });
+    db.transaction(() => {
+      db.prepare("UPDATE empleados SET estado = 'Inactivo' WHERE id = ?").run(employeeId);
+      if (current.usuario_id) db.prepare("UPDATE usuarios SET estado = 'Inactivo' WHERE id = ? AND rol = 'empleado'").run(current.usuario_id);
+    })();
+    res.json({ success: true });
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// Generate basic CRUD (reservas and employees have custom handlers)
+['tipos_articulo', 'elenco', 'generos', 'idiomas', 'clientes', 'peliculas'].forEach(table => generateCRUD(app, table));
 
 // Reservas admin — custom GET with JOINs
 app.get('/api/reservas', (req, res) => {

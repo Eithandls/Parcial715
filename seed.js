@@ -17,7 +17,7 @@ db.transaction(() => {
   // Usuarios demo para clientes registrados (deben coincidir email con tabla clientes)
   const insertUsuario = db.prepare(`INSERT INTO usuarios (username, password, nombre, email, rol) VALUES (?, ?, ?, ?, ?)`);
   insertUsuario.run('admin', hashPassword('1234'), 'Administrador', 'admin@cinemaclub.com', 'admin');
-  insertUsuario.run('empleado', hashPassword('empleado1'), 'Operador Cinema Club', 'empleado@cinemaclub.com', 'empleado');
+  const uEmpleado = insertUsuario.run('empleado', hashPassword('empleado1'), 'Juan López', 'empleado@cinemaclub.com', 'empleado').lastInsertRowid;
   insertUsuario.run('carlos', hashPassword('carlos1'), 'Carlos Pérez', 'carlos@email.com', 'cliente');
   insertUsuario.run('maria', hashPassword('maria1'), 'María Gómez', 'maria@email.com', 'cliente');
 
@@ -218,10 +218,10 @@ db.transaction(() => {
   const c5 = insertCliente.run('Luis', 'Fernández', '001-2223334-9', '809-555-0005', 'luis@email.com', 'Bella Vista').lastInsertRowid;
 
   // Empleados
-  const insertEmpleado = db.prepare(`INSERT INTO empleados (nombre, apellido, cedula, cargo, tanda, porciento_comision, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-  const em1 = insertEmpleado.run('Juan', 'López', '402-0001112-6', 'Cajero', 'Matutina', 5, '2023-01-15').lastInsertRowid;
-  const em2 = insertEmpleado.run('Carmen', 'Sánchez', '001-1112223-0', 'Cajero', 'Vespertina', 5, '2023-03-20').lastInsertRowid;
-  const em3 = insertEmpleado.run('Pedro', 'Díaz', '031-2223334-3', 'Gerente', 'Nocturna', 10, '2022-11-01').lastInsertRowid;
+  const insertEmpleado = db.prepare(`INSERT INTO empleados (usuario_id, nombre, apellido, cedula, cargo, tanda, porciento_comision, fecha_ingreso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  const em1 = insertEmpleado.run(uEmpleado, 'Juan', 'López', '402-0001112-6', 'Cajero', 'Matutina', 5, '2023-01-15').lastInsertRowid;
+  const em2 = insertEmpleado.run(null, 'Carmen', 'Sánchez', '001-1112223-0', 'Cajero', 'Vespertina', 5, '2023-03-20').lastInsertRowid;
+  const em3 = insertEmpleado.run(null, 'Pedro', 'Díaz', '031-2223334-3', 'Gerente', 'Nocturna', 10, '2022-11-01').lastInsertRowid;
 
   // Rentas (afectan disponibilidad de algunos formatos)
   const insertRenta = db.prepare(`INSERT INTO rentas (cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, fecha_devolucion_real, costo_dia, dias, total, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
