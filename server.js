@@ -456,35 +456,23 @@ app.post('/api/peliculas/completo', (req, res) => {
   }
 });
 
-// Client hard delete (before generic CRUD to take precedence)
+// Safe client deletion: hide access while preserving rental history.
 app.delete('/api/clientes/:id/permanente', (req, res) => {
   try {
-    const clienteId = req.params.id;
+    const clienteId = positiveId(req.params.id, 'Cliente');
 
-    // Check if client exists
-    const cliente = db.prepare('SELECT id, nombre, apellido FROM clientes WHERE id = ?').get(clienteId);
+    const cliente = db.prepare('SELECT id, nombre, apellido, email FROM clientes WHERE id = ?').get(clienteId);
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
 
-    // Check for active rentals
-    const activas = db.prepare('SELECT COUNT(*) as count FROM rentas WHERE cliente_id = ? AND estado = ?').get(clienteId, 'Activa');
-    if (activas.count > 0) {
-      return res.status(400).json({ error: `El cliente tiene ${activas.count} renta(s) activa(s). Debe devolver los artículos primero.` });
-    }
-
     db.transaction(() => {
-      // Delete returned rentals
-      db.prepare('DELETE FROM rentas WHERE cliente_id = ? AND estado = ?').run(clienteId, 'Devuelta');
-      // Delete reservations
-      db.prepare('DELETE FROM reservas WHERE cliente_id = ?').run(clienteId);
-      // Delete the login user account
-      db.prepare('DELETE FROM usuarios WHERE email = ?').run(cliente.email);
-      // Delete the client
-      db.prepare('DELETE FROM clientes WHERE id = ?').run(clienteId);
+      db.prepare("UPDATE clientes SET estado = 'Eliminado' WHERE id = ?").run(clienteId);
+      db.prepare("UPDATE reservas SET estado = 'Cancelada' WHERE cliente_id = ? AND estado = 'Pendiente'").run(clienteId);
+      if (cliente.email) db.prepare("UPDATE usuarios SET estado = 'Inactivo' WHERE email = ? AND rol = 'cliente'").run(cliente.email);
     })();
 
-    res.json({ success: true, message: `Cliente "${cliente.nombre} ${cliente.apellido}" eliminado permanentemente` });
+    res.json({ success: true, message: `Cliente "${cliente.nombre} ${cliente.apellido}" eliminado; su historial fue conservado` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -622,10 +610,10 @@ app.delete('/api/empleados/:id', (req, res) => {
     const current = db.prepare('SELECT usuario_id FROM empleados WHERE id = ?').get(employeeId);
     if (!current) return res.status(404).json({ error: 'Empleado no encontrado' });
     db.transaction(() => {
-      db.prepare("UPDATE empleados SET estado = 'Inactivo' WHERE id = ?").run(employeeId);
+      db.prepare("UPDATE empleados SET estado = 'Eliminado' WHERE id = ?").run(employeeId);
       if (current.usuario_id) db.prepare("UPDATE usuarios SET estado = 'Inactivo' WHERE id = ? AND rol = 'empleado'").run(current.usuario_id);
     })();
-    res.json({ success: true });
+    res.json({ success: true, message: 'Empleado eliminado; su historial fue conservado y su acceso desactivado' });
   } catch (err) {
     sendError(res, err);
   }

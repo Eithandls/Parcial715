@@ -124,23 +124,23 @@ App.registerPage('clientes', async (container) => {
         <div style="text-align:center; padding:12px 0;">
           <span class="material-symbols-outlined" style="font-size:48px; color:var(--error); margin-bottom:12px;">warning</span>
           <h4 style="margin-bottom:8px;">¿Eliminar este cliente?</h4>
-          <p class="text-muted">Esta acción no se puede deshacer. Se borrará permanentemente de la base de datos.</p>
-          <p class="text-muted" style="margin-top:8px; font-size:13px;">Si solo quieres desactivarlo, usa la opción <b>Inactivo</b> en el formulario de edición.</p>
+          <p class="text-muted">El cliente desaparecerá de las listas y perderá su acceso.</p>
+          <p class="text-muted" style="margin-top:8px; font-size:13px;">Sus rentas anteriores se conservarán para no afectar el historial.</p>
         </div>
       `;
       Components.showModal('Confirmar Eliminación', confirmHtml, `
         <button class="btn btn-outline" onclick="Components.closeModal()">Cancelar</button>
         <button class="btn btn-error" onclick="window.Clientes.confirmarDelete(${id})">
-          <span class="material-symbols-outlined">delete_forever</span> Sí, eliminar permanentemente
+          <span class="material-symbols-outlined">delete</span> Sí, eliminar cliente
         </button>
       `);
     },
 
     async confirmarDelete(id) {
       try {
-        await API.request('DELETE', `/api/clientes/${id}/permanente`);
+        const result = await API.request('DELETE', `/api/clientes/${id}/permanente`);
         Components.closeModal();
-        Components.showToast('Cliente eliminado permanentemente');
+        Components.showToast(result.message || 'Cliente eliminado correctamente');
         loadData();
       } catch (e) {
         Components.showToast(e.message, 'error');

@@ -146,8 +146,8 @@ App.registerPage('empleados', async (container) => {
     async delete(id) {
       if (await Components.confirm('¿Estás seguro de eliminar este empleado?')) {
         try {
-          await API.remove('empleados', id);
-          Components.showToast('Eliminado correctamente');
+          const result = await API.remove('empleados', id);
+          Components.showToast(result.message || 'Empleado eliminado correctamente');
           loadData();
         } catch (e) {
           Components.showToast(e.message, 'error');
