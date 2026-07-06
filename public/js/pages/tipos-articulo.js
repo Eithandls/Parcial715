@@ -40,7 +40,7 @@ App.registerPage('tipos-articulo', async (container) => {
         <form id="tipo-form" onsubmit="event.preventDefault(); window.TiposArticulo.save(${id || 'null'})">
           <div class="form-group">
             <label>Descripción</label>
-            <input type="text" id="tipo-desc" class="form-control" required value="${data.descripcion}" placeholder="Ej: DVD Película">
+            <input type="text" id="tipo-desc" class="form-control" required minlength="2" maxlength="80" value="${data.descripcion}" placeholder="Ej: DVD Película">
           </div>
           <div class="form-group">
             <label>Estado</label>

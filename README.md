@@ -22,8 +22,20 @@ El servidor corre en `http://localhost:3000`.
 | Usuario  | Contraseña | Rol      |
 |----------|-----------|----------|
 | admin    | 1234      | Admin    |
+| empleado | empleado1 | Empleado |
 | carlos   | carlos1   | Cliente  |
 | maria    | maria1    | Cliente  |
+
+## Seguridad y roles
+
+- Las contraseñas se almacenan con `scrypt` y salt individual.
+- Las sesiones usan tokens criptográficos con una duración máxima de 8 horas.
+- El inicio de sesión limita los intentos fallidos para reducir ataques de fuerza bruta.
+- Los permisos se validan tanto en la interfaz como en la API:
+  - **Admin:** acceso completo.
+  - **Empleado:** operación diaria, sin gestión de empleados ni reportes administrativos.
+  - **Cliente:** catálogo, autoservicio de rentas y sus propios historiales y reservas.
+- La API valida campos obligatorios, formatos, rangos, estados y relaciones antes de guardar.
 
 ## Estructura del proyecto
 
@@ -77,6 +89,7 @@ El servidor corre en `http://localhost:3000`.
 - **Reservas**: Si un artículo no está disponible, el cliente puede reservarlo
 - **Devolución con penalidad**: Si se devuelve tarde, se aplica un recargo del 50% por día adicional
 - **Filtros**: Búsqueda por título, género, formato e idioma con botón de búsqueda
+- **Consultas flexibles**: Combina texto, cliente, empleado, artículo, formato, género, idioma, fechas, montos y estado; permite ordenar y exportar a CSV
 
 ## Base de datos
 

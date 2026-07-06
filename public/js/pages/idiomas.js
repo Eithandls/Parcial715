@@ -35,7 +35,7 @@ App.registerPage('idiomas', async (container) => {
         <form onsubmit="event.preventDefault(); window.Idiomas.save(${id || 'null'})">
           <div class="form-group">
             <label>Descripción del Idioma</label>
-            <input type="text" id="idioma-desc" class="form-control" required value="${data.descripcion}" placeholder="Ej: Español, Inglés">
+            <input type="text" id="idioma-desc" class="form-control" required minlength="2" maxlength="60" value="${data.descripcion}" placeholder="Ej: Español, Inglés">
           </div>
           <div class="form-group">
             <label>Estado</label>

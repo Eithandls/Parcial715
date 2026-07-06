@@ -3,6 +3,16 @@ const App = {
   user: null,
   pages: {},
 
+  rolePages: {
+    admin: ['dashboard', 'peliculas', 'articulos', 'musica', 'clientes', 'empleados', 'rentas', 'reservas', 'consultas', 'reportes', 'tipos-articulo', 'elenco', 'generos', 'idiomas'],
+    empleado: ['dashboard', 'peliculas', 'articulos', 'musica', 'clientes', 'rentas', 'reservas', 'consultas', 'tipos-articulo', 'elenco', 'generos', 'idiomas'],
+    cliente: ['catalogo', 'musica', 'mis-rentas', 'mis-reservas']
+  },
+
+  canAccess(page) {
+    return Boolean(this.user && (this.rolePages[this.user.rol] || []).includes(page));
+  },
+
   registerPage(name, renderFn) {
     this.pages[name] = renderFn;
   },
@@ -108,6 +118,11 @@ const App = {
   },
 
   navigate(page) {
+    if (!this.canAccess(page)) {
+      const fallback = this.user?.rol === 'cliente' ? 'catalogo' : 'dashboard';
+      if (page !== fallback) Components.showToast('Tu rol no tiene permiso para esa opción', 'error');
+      page = fallback;
+    }
     this.currentPage = page;
     Components.renderSidebar(page);
     const content = document.getElementById('content');

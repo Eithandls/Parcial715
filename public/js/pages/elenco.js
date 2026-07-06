@@ -36,7 +36,7 @@ App.registerPage('elenco', async (container) => {
         <form onsubmit="event.preventDefault(); window.Elenco.save(${id || 'null'})">
           <div class="form-group">
             <label>Nombre Completo</label>
-            <input type="text" id="elenco-nombre" class="form-control" required value="${data.nombre}" placeholder="Ej: Leonardo DiCaprio">
+            <input type="text" id="elenco-nombre" class="form-control" required minlength="2" maxlength="120" value="${data.nombre}" placeholder="Ej: Leonardo DiCaprio">
           </div>
           <div class="grid-2">
             <div class="form-group">

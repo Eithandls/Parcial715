@@ -39,22 +39,22 @@ App.registerPage('empleados', async (container) => {
           <div class="grid-2 mb-sm">
             <div class="form-group">
               <label>Nombre</label>
-              <input type="text" id="emp-nombre" class="form-control" required value="${data.nombre}">
+              <input type="text" id="emp-nombre" class="form-control" required minlength="2" maxlength="80" value="${data.nombre}">
             </div>
             <div class="form-group">
               <label>Apellido</label>
-              <input type="text" id="emp-apellido" class="form-control" required value="${data.apellido}">
+              <input type="text" id="emp-apellido" class="form-control" required minlength="2" maxlength="80" value="${data.apellido}">
             </div>
           </div>
           
           <div class="grid-2 mb-sm">
             <div class="form-group">
               <label>Cédula</label>
-              <input type="text" id="emp-cedula" class="form-control" value="${data.cedula || ''}">
+              <input type="text" id="emp-cedula" class="form-control" pattern="[0-9]{3}-[0-9]{7}-[0-9]" maxlength="13" value="${data.cedula || ''}" placeholder="000-0000000-0">
             </div>
             <div class="form-group">
               <label>Cargo</label>
-              <input type="text" id="emp-cargo" class="form-control" value="${data.cargo || ''}">
+              <input type="text" id="emp-cargo" class="form-control" minlength="2" maxlength="80" value="${data.cargo || ''}">
             </div>
           </div>
 
@@ -69,7 +69,7 @@ App.registerPage('empleados', async (container) => {
             </div>
             <div class="form-group">
               <label>% Comisión</label>
-              <input type="number" step="0.1" id="emp-comision" class="form-control" value="${data.porciento_comision || 0}">
+              <input type="number" step="0.1" min="0" max="100" id="emp-comision" class="form-control" value="${data.porciento_comision || 0}">
             </div>
             <div class="form-group">
               <label>Fecha Ingreso</label>

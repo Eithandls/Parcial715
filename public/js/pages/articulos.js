@@ -53,7 +53,7 @@ App.registerPage('articulos', async (container) => {
         <form onsubmit="event.preventDefault(); window.Articulos.save(${id || 'null'})">
           <div class="form-group">
             <label>Título de la Obra</label>
-            <input type="text" id="art-titulo" class="form-control" required value="${data.titulo}">
+            <input type="text" id="art-titulo" class="form-control" required maxlength="160" value="${data.titulo}">
           </div>
           
           <div class="grid-3 mb-md">
@@ -83,25 +83,25 @@ App.registerPage('articulos', async (container) => {
           <div class="grid-4 mb-md">
             <div class="form-group">
               <label>Duración (min)</label>
-              <input type="number" id="art-duracion" class="form-control" value="${data.duracion}">
+              <input type="number" id="art-duracion" class="form-control" min="1" max="1000" value="${data.duracion}">
             </div>
             <div class="form-group">
               <label>Año</label>
-              <input type="number" id="art-anio" class="form-control" value="${data.anio}">
+              <input type="number" id="art-anio" class="form-control" min="1888" max="${new Date().getFullYear() + 5}" value="${data.anio}">
             </div>
             <div class="form-group">
               <label>Costo Diario (RD$)</label>
-              <input type="number" step="0.01" id="art-costo" class="form-control" required value="${data.costo_dia}">
+              <input type="number" step="0.01" min="0.01" id="art-costo" class="form-control" required value="${data.costo_dia}">
             </div>
             <div class="form-group">
               <label>Stock</label>
-              <input type="number" id="art-stock" class="form-control" required value="${data.cantidad_disponible}">
+              <input type="number" id="art-stock" class="form-control" required min="0" value="${data.cantidad_disponible}">
             </div>
           </div>
 
           <div class="form-group">
             <label>Sinopsis</label>
-            <textarea id="art-sinopsis" class="form-control" rows="3">${data.sinopsis || ''}</textarea>
+            <textarea id="art-sinopsis" class="form-control" rows="3" maxlength="2000">${data.sinopsis || ''}</textarea>
           </div>
 
           <div class="form-group" style="width: 30%">

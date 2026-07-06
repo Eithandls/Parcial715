@@ -2,53 +2,153 @@ const express = require('express');
 const cors = require('cors');
 const { db } = require('./database');
 const path = require('path');
+const { hashPassword, verifyPassword, createToken, canAccessRoute } = require('./security');
+const { ValidationError, validateBody, validateDateRange } = require('./validation');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
+    return callback(new Error('Origen no permitido'));
+  }
+}));
+app.use(express.json({ limit: '100kb' }));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Simple Token-based Auth (In-memory)
+// Tokens are kept server-side and generated cryptographically.
 const activeTokens = new Map();
+const loginAttempts = new Map();
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
 
-// Admin fijo (no necesita estar en la DB)
-const ADMIN_USER = { id: 0, username: 'admin', nombre: 'Administrador', email: 'admin@cinemaclub.com', rol: 'admin' };
+// Keep the documented demo administrator available for existing databases.
+if (!db.prepare('SELECT id FROM usuarios WHERE username = ?').get('admin')) {
+  db.prepare(`INSERT INTO usuarios (username, password, nombre, email, rol) VALUES (?, ?, ?, ?, ?)`)
+    .run('admin', hashPassword('1234'), 'Administrador', 'admin@cinemaclub.com', 'admin');
+}
+if (!db.prepare('SELECT id FROM usuarios WHERE username = ?').get('empleado')) {
+  db.prepare(`INSERT INTO usuarios (username, password, nombre, email, rol) VALUES (?, ?, ?, ?, ?)`)
+    .run('empleado', hashPassword('empleado1'), 'Operador Cinema Club', 'empleado@cinemaclub.com', 'empleado');
+}
+
+const cleanUser = (user) => ({
+  id: user.id,
+  username: user.username,
+  nombre: user.nombre,
+  email: user.email,
+  rol: user.rol
+});
+
+const sendError = (res, err) => {
+  if (err instanceof ValidationError) {
+    return res.status(err.status).json({ error: err.message, errors: err.errors });
+  }
+  if (String(err.message).includes('UNIQUE constraint failed')) {
+    return res.status(409).json({ error: 'Ya existe un registro con esos datos únicos' });
+  }
+  console.error(err);
+  return res.status(500).json({ error: 'No se pudo completar la operación' });
+};
+
+const ensureReference = (table, id, label) => {
+  if (!db.prepare(`SELECT id FROM ${table} WHERE id = ? AND estado = 'Activo'`).get(id)) {
+    throw new ValidationError([`${label} no existe o está inactivo`]);
+  }
+};
+
+const positiveId = (value, label) => {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id < 1) throw new ValidationError([`${label} es obligatorio`]);
+  return id;
+};
+
+const createSession = (user) => {
+  const token = createToken();
+  activeTokens.set(token, { user, expiresAt: Date.now() + SESSION_TTL_MS });
+  return token;
+};
+
+const getSession = (token) => {
+  const session = activeTokens.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    activeTokens.delete(token);
+    return null;
+  }
+  const current = db.prepare('SELECT estado, rol FROM usuarios WHERE id = ?').get(session.user.id);
+  if (!current || current.estado !== 'Activo') {
+    activeTokens.delete(token);
+    return null;
+  }
+  session.user.rol = current.rol;
+  return session;
+};
 
 app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
-
-  // Admin hardcodeado
-  if (username === 'admin' && password === '1234') {
-    const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    activeTokens.set(token, ADMIN_USER);
-    return res.json({ token, user: ADMIN_USER });
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
+  if (username.length < 3 || username.length > 30 || password.length < 4 || password.length > 72) {
+    return res.status(400).json({ error: 'Usuario y contraseña son obligatorios' });
   }
 
-  // Clientes registrados en DB
-  const user = db.prepare('SELECT id, username, nombre, email, rol FROM usuarios WHERE username = ? AND password = ? AND estado = ?').get(username, password, 'Activo');
-  
-  if (user) {
-    const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    activeTokens.set(token, user);
-    res.json({ token, user });
-  } else {
-    res.status(401).json({ error: 'Credenciales inválidas o usuario inactivo' });
+  const attemptKey = `${req.ip}:${username.toLowerCase()}`;
+  const previous = loginAttempts.get(attemptKey);
+  if (previous && previous.resetAt > Date.now() && previous.count >= MAX_LOGIN_ATTEMPTS) {
+    return res.status(429).json({ error: 'Demasiados intentos. Intenta nuevamente en 15 minutos' });
   }
+  if (previous && previous.resetAt <= Date.now()) loginAttempts.delete(attemptKey);
+
+  const record = db.prepare('SELECT * FROM usuarios WHERE username = ? AND estado = ?').get(username, 'Activo');
+  if (!record || !verifyPassword(password, record.password)) {
+    const attempt = loginAttempts.get(attemptKey) || { count: 0, resetAt: Date.now() + LOGIN_WINDOW_MS };
+    attempt.count += 1;
+    loginAttempts.set(attemptKey, attempt);
+    return res.status(401).json({ error: 'Credenciales inválidas o usuario inactivo' });
+  }
+  loginAttempts.delete(attemptKey);
+
+  // Upgrade old demo/plain-text passwords after a successful login.
+  if (!String(record.password).startsWith('scrypt$')) {
+    db.prepare('UPDATE usuarios SET password = ? WHERE id = ?').run(hashPassword(password), record.id);
+  }
+
+  const user = cleanUser(record);
+  const token = createSession(user);
+  res.json({ token, user });
 });
 
 app.post('/api/auth/register', (req, res) => {
-  const { nombre, email, username, password, cedula, telefono } = req.body;
-  
-  if (!nombre || !email || !username || !password) {
-    return res.status(400).json({ error: 'Todos los campos son obligatorios' });
-  }
+  const nombre = String(req.body?.nombre || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
+  const cedula = String(req.body?.cedula || '').trim() || null;
+  const telefono = String(req.body?.telefono || '').trim() || null;
+
+  const errors = [];
+  if (nombre.length < 3 || nombre.length > 120) errors.push('Nombre debe tener entre 3 y 120 caracteres');
+  if (/[<>]/.test(nombre)) errors.push('Nombre contiene caracteres no permitidos');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Correo no tiene un formato válido');
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(username)) errors.push('Usuario debe tener de 3 a 30 caracteres y solo usar letras, números, punto, guion o guion bajo');
+  if (password.length < 6 || password.length > 72) errors.push('Contraseña debe tener entre 6 y 72 caracteres');
+  if (cedula && !/^\d{3}-\d{7}-\d$/.test(cedula)) errors.push('Cédula debe usar el formato 000-0000000-0');
+  if (telefono && !/^\d{3}-\d{3}-\d{4}$/.test(telefono)) errors.push('Teléfono debe usar el formato 809-000-0000');
+  if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
   try {
     // Siempre se registra como cliente
     const stmt = db.prepare(`INSERT INTO usuarios (nombre, email, username, password, rol) VALUES (?, ?, ?, ?, ?)`);
-    const info = stmt.run(nombre, email, username, password, 'cliente');
+    const info = stmt.run(nombre, email, username, hashPassword(password), 'cliente');
     
     // Crear perfil de cliente automáticamente
     try {
@@ -56,15 +156,14 @@ app.post('/api/auth/register', (req, res) => {
     } catch (e) { console.error('Error creando cliente:', e.message); }
     
     const user = { id: info.lastInsertRowid, username, nombre, email, rol: 'cliente' };
-    const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    activeTokens.set(token, user);
+    const token = createSession(user);
     
     res.json({ token, user });
   } catch (err) {
     if (err.message.includes('UNIQUE constraint failed')) {
       res.status(400).json({ error: 'El nombre de usuario o correo ya está en uso' });
     } else {
-      res.status(500).json({ error: err.message });
+      sendError(res, err);
     }
   }
 });
@@ -74,9 +173,9 @@ app.get('/api/auth/me', (req, res) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' });
   
   const token = authHeader.split(' ')[1];
-  const user = activeTokens.get(token);
+  const session = getSession(token);
   
-  if (user) res.json({ user });
+  if (session) res.json({ user: session.user });
   else res.status(401).json({ error: 'Invalid or expired token' });
 });
 
@@ -94,14 +193,21 @@ const authMiddleware = (req, res, next) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'No token provided' });
   
   const token = authHeader.split(' ')[1];
-  const user = activeTokens.get(token);
-  if (!user) return res.status(401).json({ error: 'Invalid or expired token' });
+  const session = getSession(token);
+  if (!session) return res.status(401).json({ error: 'Invalid or expired token' });
   
-  req.user = user;
+  req.user = session.user;
   next();
 };
 
 app.use('/api', authMiddleware); // Protect all API routes except auth
+
+app.use('/api', (req, res, next) => {
+  const path = req.originalUrl.split('?')[0];
+  return canAccessRoute(req.user.rol, req.method, path)
+    ? next()
+    : res.status(403).json({ error: 'Tu rol no tiene permiso para esta opción' });
+});
 
 // --- Generic CRUD Helper ---
 function generateCRUD(app, table) {
@@ -146,29 +252,33 @@ function generateCRUD(app, table) {
   });
 
   app.post(`/api/${table}`, (req, res) => {
-    const keys = Object.keys(req.body);
-    const values = Object.values(req.body);
-    const placeholders = keys.map(() => '?').join(',');
     try {
+      const data = validateBody(table, req.body);
+      if (table === 'peliculas') ensureReference('generos', data.genero_id, 'Género');
+      const keys = Object.keys(data);
+      const values = Object.values(data);
+      const placeholders = keys.map(() => '?').join(',');
       const stmt = db.prepare(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${placeholders})`);
       const info = stmt.run(...values);
-      res.json({ id: info.lastInsertRowid, ...req.body });
+      res.status(201).json({ id: info.lastInsertRowid, ...data });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      sendError(res, err);
     }
   });
 
   app.put(`/api/${table}/:id`, (req, res) => {
-    const keys = Object.keys(req.body);
-    const values = Object.values(req.body);
-    const setClause = keys.map(k => `${k} = ?`).join(',');
     try {
+      const data = validateBody(table, req.body, { partial: true });
+      if (table === 'peliculas' && data.genero_id) ensureReference('generos', data.genero_id, 'Género');
+      const keys = Object.keys(data);
+      const values = Object.values(data);
+      const setClause = keys.map(k => `${k} = ?`).join(',');
       const stmt = db.prepare(`UPDATE ${table} SET ${setClause} WHERE id = ?`);
       const info = stmt.run(...values, req.params.id);
-      if (info.changes > 0) res.json({ id: req.params.id, ...req.body });
+      if (info.changes > 0) res.json({ id: req.params.id, ...data });
       else res.status(404).json({ error: 'Not found' });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      sendError(res, err);
     }
   });
 
@@ -260,37 +370,61 @@ app.get('/api/peliculas/completo', (req, res) => {
 app.post('/api/peliculas/completo', (req, res) => {
   const { titulo, genero_id, duracion, anio, sinopsis, formatos, elenco_director, elenco_reparto } = req.body;
 
-  if (!titulo || !genero_id) {
-    return res.status(400).json({ error: 'Título y género son requeridos' });
-  }
-  if (!formatos || formatos.length === 0) {
-    return res.status(400).json({ error: 'Debe agregar al menos un formato' });
-  }
-
   try {
+    const pelicula = validateBody('peliculas', { titulo, genero_id, duracion, anio, sinopsis });
+    if (!Array.isArray(formatos) || formatos.length === 0) throw new ValidationError(['Debe agregar al menos un formato']);
+    if (formatos.length > 20) throw new ValidationError(['No puede agregar más de 20 formatos a la vez']);
+    ensureReference('generos', pelicula.genero_id, 'Género');
+
+    const formatosValidos = formatos.map((formato, index) => {
+      try {
+        const data = validateBody('articulos', {
+          titulo: pelicula.titulo,
+          genero_id: pelicula.genero_id,
+          tipo_articulo_id: formato.tipo_articulo_id,
+          idioma_id: formato.idioma_id,
+          duracion: pelicula.duracion,
+          anio: pelicula.anio,
+          sinopsis: pelicula.sinopsis,
+          costo_dia: formato.costo_dia,
+          cantidad_disponible: formato.cantidad_disponible
+        });
+        ensureReference('tipos_articulo', data.tipo_articulo_id, `Tipo del formato ${index + 1}`);
+        ensureReference('idiomas', data.idioma_id, `Idioma del formato ${index + 1}`);
+        return data;
+      } catch (err) {
+        if (err instanceof ValidationError) throw new ValidationError(err.errors.map(message => `Formato ${index + 1}: ${message}`));
+        throw err;
+      }
+    });
+
+    const directorText = String(elenco_director || '').trim();
+    const repartoText = String(elenco_reparto || '').trim();
+    if (directorText.length > 1000 || repartoText.length > 2000) throw new ValidationError(['El texto del elenco es demasiado largo']);
+    if (/[<>]/.test(directorText) || /[<>]/.test(repartoText)) throw new ValidationError(['El elenco contiene caracteres no permitidos']);
     let resultId;
 
     db.transaction(() => {
       const peliStmt = db.prepare('INSERT INTO peliculas (titulo, genero_id, duracion, anio, sinopsis, estado) VALUES (?, ?, ?, ?, ?, ?)');
-      const peliInfo = peliStmt.run(titulo, genero_id, duracion || null, anio || null, sinopsis || null, 'Activo');
+      const peliInfo = peliStmt.run(pelicula.titulo, pelicula.genero_id, pelicula.duracion || null, pelicula.anio || null, pelicula.sinopsis || null, 'Activo');
       const pelicula_id = peliInfo.lastInsertRowid;
       resultId = pelicula_id;
 
       let firstArticuloId = null;
       const artStmt = db.prepare('INSERT INTO articulos (pelicula_id, titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
-      for (const fmt of formatos) {
+      for (const fmt of formatosValidos) {
         const artInfo = artStmt.run(
-          pelicula_id, titulo, fmt.tipo_articulo_id, genero_id, fmt.idioma_id,
-          duracion || null, anio || null, sinopsis || null,
-          fmt.costo_dia || 0, fmt.cantidad_disponible || 1, 'Activo'
+          pelicula_id, pelicula.titulo, fmt.tipo_articulo_id, pelicula.genero_id, fmt.idioma_id,
+          pelicula.duracion || null, pelicula.anio || null, pelicula.sinopsis || null,
+          fmt.costo_dia, fmt.cantidad_disponible, 'Activo'
         );
         if (firstArticuloId === null) firstArticuloId = artInfo.lastInsertRowid;
       }
 
       // Process director names (parse comma-separated)
-      const directorNames = (elenco_director || '').split(',').map(s => s.trim()).filter(Boolean);
-      const repartoNames = (elenco_reparto || '').split(',').map(s => s.trim()).filter(Boolean);
+      const directorNames = directorText.split(',').map(s => s.trim()).filter(Boolean);
+      const repartoNames = repartoText.split(',').map(s => s.trim()).filter(Boolean);
 
       const upsertElenco = db.prepare('INSERT OR IGNORE INTO elenco (nombre, tipo) VALUES (?, ?)');
       const getElenco = db.prepare('SELECT id FROM elenco WHERE nombre = ? AND tipo = ?');
@@ -311,7 +445,7 @@ app.post('/api/peliculas/completo', (req, res) => {
 
     res.json({ success: true, id: resultId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -374,6 +508,9 @@ app.get('/api/reservas', (req, res) => {
 app.put('/api/reservas/:id', (req, res) => {
   const { estado } = req.body;
   if (!estado) return res.status(400).json({ error: 'Estado requerido' });
+  if (!['Completada', 'Cancelada', 'Pendiente'].includes(estado)) {
+    return res.status(400).json({ error: 'Estado de reserva no válido' });
+  }
 
   try {
     if (estado === 'Completada') {
@@ -555,26 +692,32 @@ function getOrCreatePelicula(titulo, genero_id, duracion, anio, sinopsis) {
 }
 
 app.post('/api/articulos', (req, res) => {
-  const { titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado } = req.body;
   try {
-    const pelicula_id = getOrCreatePelicula(titulo, genero_id, duracion, anio, sinopsis);
+    const data = validateBody('articulos', req.body);
+    ensureReference('tipos_articulo', data.tipo_articulo_id, 'Tipo de artículo');
+    ensureReference('generos', data.genero_id, 'Género');
+    ensureReference('idiomas', data.idioma_id, 'Idioma');
+    const pelicula_id = getOrCreatePelicula(data.titulo, data.genero_id, data.duracion, data.anio, data.sinopsis);
     const stmt = db.prepare(`INSERT INTO articulos (pelicula_id, titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const info = stmt.run(pelicula_id, titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado);
-    res.json({ id: info.lastInsertRowid });
+    const info = stmt.run(pelicula_id, data.titulo, data.tipo_articulo_id, data.genero_id, data.idioma_id, data.duracion || null, data.anio || null, data.sinopsis || null, data.costo_dia, data.cantidad_disponible, data.estado || 'Activo');
+    res.status(201).json({ id: info.lastInsertRowid });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 app.put('/api/articulos/:id', (req, res) => {
-  const { titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado } = req.body;
   try {
-    const pelicula_id = getOrCreatePelicula(titulo, genero_id, duracion, anio, sinopsis);
+    const data = validateBody('articulos', req.body);
+    ensureReference('tipos_articulo', data.tipo_articulo_id, 'Tipo de artículo');
+    ensureReference('generos', data.genero_id, 'Género');
+    ensureReference('idiomas', data.idioma_id, 'Idioma');
+    const pelicula_id = getOrCreatePelicula(data.titulo, data.genero_id, data.duracion, data.anio, data.sinopsis);
     const stmt = db.prepare(`UPDATE articulos SET pelicula_id=?, titulo=?, tipo_articulo_id=?, genero_id=?, idioma_id=?, duracion=?, anio=?, sinopsis=?, costo_dia=?, cantidad_disponible=?, estado=? WHERE id=?`);
-    const info = stmt.run(pelicula_id, titulo, tipo_articulo_id, genero_id, idioma_id, duracion, anio, sinopsis, costo_dia, cantidad_disponible, estado, req.params.id);
+    const info = stmt.run(pelicula_id, data.titulo, data.tipo_articulo_id, data.genero_id, data.idioma_id, data.duracion || null, data.anio || null, data.sinopsis || null, data.costo_dia, data.cantidad_disponible, data.estado || 'Activo', req.params.id);
     if (info.changes > 0) res.json({ id: req.params.id });
     else res.status(404).json({ error: 'Not found' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 app.delete('/api/articulos/:id', (req, res) => {
@@ -601,18 +744,23 @@ app.get('/api/articulos/:id/elenco', (req, res) => {
 });
 
 app.post('/api/articulos/:id/elenco', (req, res) => {
-  const articulo_id = req.params.id;
+  const articulo_id = Number(req.params.id);
   const elenco_ids = req.body.elenco_ids || [];
   try {
+    positiveId(articulo_id, 'Artículo');
+    if (!Array.isArray(elenco_ids) || elenco_ids.length > 100) throw new ValidationError(['Lista de elenco no válida']);
+    const validIds = elenco_ids.map(id => positiveId(id, 'Integrante del elenco'));
+    if (new Set(validIds).size !== validIds.length) throw new ValidationError(['El elenco contiene integrantes duplicados']);
+    for (const id of validIds) ensureReference('elenco', id, 'Integrante del elenco');
     db.prepare(`DELETE FROM articulos_elenco WHERE articulo_id = ?`).run(articulo_id);
     const insert = db.prepare(`INSERT INTO articulos_elenco (articulo_id, elenco_id) VALUES (?, ?)`);
     const insertMany = db.transaction((ids) => {
       for (const id of ids) insert.run(articulo_id, id);
     });
-    insertMany(elenco_ids);
+    insertMany(validIds);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -622,8 +770,14 @@ app.post('/api/articulos/:id/elenco/texto', (req, res) => {
   const { director, reparto } = req.body;
 
   try {
-    const directorNames = (director || '').split(',').map(s => s.trim()).filter(Boolean);
-    const repartoNames = (reparto || '').split(',').map(s => s.trim()).filter(Boolean);
+    const directorText = String(director || '').trim();
+    const repartoText = String(reparto || '').trim();
+    if (directorText.length > 1000 || repartoText.length > 2000) throw new ValidationError(['El texto del elenco es demasiado largo']);
+    if (/[<>]/.test(directorText) || /[<>]/.test(repartoText)) throw new ValidationError(['El elenco contiene caracteres no permitidos']);
+    if (!db.prepare('SELECT id FROM articulos WHERE id = ?').get(positiveId(articulo_id, 'Artículo'))) throw new ValidationError(['Artículo no encontrado']);
+    const directorNames = directorText.split(',').map(s => s.trim()).filter(Boolean);
+    const repartoNames = repartoText.split(',').map(s => s.trim()).filter(Boolean);
+    if (directorNames.length + repartoNames.length > 100) throw new ValidationError(['No puede agregar más de 100 personas al elenco']);
 
     db.transaction(() => {
       db.prepare('DELETE FROM articulos_elenco WHERE articulo_id = ?').run(articulo_id);
@@ -647,7 +801,7 @@ app.post('/api/articulos/:id/elenco/texto', (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -671,20 +825,20 @@ app.get('/api/rentas', (req, res) => {
 
 app.post('/api/rentas', (req, res) => {
   const { cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, comentario } = req.body;
-  
-  if (!fecha_renta || !fecha_devolucion_prevista) {
-    return res.status(400).json({ error: 'Ambas fechas son requeridas' });
-  }
-  const rentaDate = new Date(fecha_renta);
-  const devDate = new Date(fecha_devolucion_prevista);
-  if (devDate < rentaDate) {
-    return res.status(400).json({ error: 'La fecha de devolución no puede ser anterior a la fecha de renta' });
-  }
 
   try {
+    const clienteId = positiveId(cliente_id, 'Cliente');
+    const empleadoId = positiveId(empleado_id, 'Empleado');
+    const articuloId = positiveId(articulo_id, 'Artículo');
+    validateDateRange(fecha_renta, fecha_devolucion_prevista);
+    if (!fecha_renta || !fecha_devolucion_prevista) throw new ValidationError(['Ambas fechas son requeridas']);
+    if (String(comentario || '').length > 1000) throw new ValidationError(['Comentario no puede superar 1000 caracteres']);
+    ensureReference('clientes', clienteId, 'Cliente');
+    ensureReference('empleados', empleadoId, 'Empleado');
+
     db.transaction(() => {
-      const articulo = db.prepare(`SELECT costo_dia, cantidad_disponible FROM articulos WHERE id = ?`).get(articulo_id);
-      if (!articulo || articulo.cantidad_disponible <= 0) throw new Error('Artículo no disponible');
+      const articulo = db.prepare(`SELECT costo_dia, cantidad_disponible FROM articulos WHERE id = ? AND estado = 'Activo'`).get(articuloId);
+      if (!articulo || articulo.cantidad_disponible <= 0) throw new ValidationError(['Artículo no disponible']);
       
       const start = new Date(fecha_renta);
       const end = new Date(fecha_devolucion_prevista);
@@ -692,13 +846,13 @@ app.post('/api/rentas', (req, res) => {
       const total = dias * articulo.costo_dia;
 
       const stmt = db.prepare(`INSERT INTO rentas (cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, costo_dia, dias, total, estado, comentario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Activa', ?)`);
-      stmt.run(cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, articulo.costo_dia, dias, total, comentario);
+      stmt.run(clienteId, empleadoId, articuloId, fecha_renta, fecha_devolucion_prevista, articulo.costo_dia, dias, total, String(comentario || '').trim() || null);
       
-      db.prepare(`UPDATE articulos SET cantidad_disponible = cantidad_disponible - 1 WHERE id = ?`).run(articulo_id);
+      db.prepare(`UPDATE articulos SET cantidad_disponible = cantidad_disponible - 1 WHERE id = ?`).run(articuloId);
     })();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -706,26 +860,19 @@ app.post('/api/rentas', (req, res) => {
 app.post('/api/rentas/cliente', (req, res) => {
   const { articulo_id, fecha_renta, fecha_devolucion_prevista } = req.body;
 
-  if (!fecha_renta || !fecha_devolucion_prevista) {
-    return res.status(400).json({ error: 'Ambas fechas son requeridas' });
-  }
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const rentaDate = new Date(fecha_renta);
-  const devDate = new Date(fecha_devolucion_prevista);
-  if (devDate < rentaDate) {
-    return res.status(400).json({ error: 'La fecha de devolución no puede ser anterior a la fecha de renta' });
-  }
-  if (rentaDate < hoy) {
-    return res.status(400).json({ error: 'La fecha de renta no puede ser anterior a hoy' });
-  }
-
   try {
+    const articuloId = positiveId(articulo_id, 'Artículo');
+    validateDateRange(fecha_renta, fecha_devolucion_prevista);
+    if (!fecha_renta || !fecha_devolucion_prevista) throw new ValidationError(['Ambas fechas son requeridas']);
+    const today = new Date().toISOString().split('T')[0];
+    if (fecha_renta < today) throw new ValidationError(['La fecha de renta no puede ser anterior a hoy']);
+
     const cliente = db.prepare('SELECT id FROM clientes WHERE email = ?').get(req.user.email);
-    if (!cliente) throw new Error('Perfil de cliente no encontrado');
+    if (!cliente) throw new ValidationError(['Perfil de cliente no encontrado']);
     
     db.transaction(() => {
-      const art = db.prepare('SELECT costo_dia, cantidad_disponible FROM articulos WHERE id = ?').get(articulo_id);
-      if (!art || art.cantidad_disponible < 1) throw new Error('Artículo no disponible');
+      const art = db.prepare("SELECT costo_dia, cantidad_disponible FROM articulos WHERE id = ? AND estado = 'Activo'").get(articuloId);
+      if (!art || art.cantidad_disponible < 1) throw new ValidationError(['Artículo no disponible']);
       
       const start = new Date(fecha_renta);
       const end = new Date(fecha_devolucion_prevista);
@@ -735,20 +882,20 @@ app.post('/api/rentas/cliente', (req, res) => {
       
       // employee_id 1 is the Admin/System for web rentals
       const stmt = db.prepare(`INSERT INTO rentas (cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, costo_dia, dias, total, estado, comentario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Activa', ?)`);
-      stmt.run(cliente.id, 1, articulo_id, fecha_renta, fecha_devolucion_prevista, art.costo_dia, dias, total, 'Autoservicio Web');
+      stmt.run(cliente.id, 1, articuloId, fecha_renta, fecha_devolucion_prevista, art.costo_dia, dias, total, 'Autoservicio Web');
       
-      db.prepare(`UPDATE articulos SET cantidad_disponible = cantidad_disponible - 1 WHERE id = ?`).run(articulo_id);
+      db.prepare(`UPDATE articulos SET cantidad_disponible = cantidad_disponible - 1 WHERE id = ?`).run(articuloId);
     })();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
 // Reservas
 app.post('/api/reservas', (req, res) => {
-  const { articulo_id } = req.body;
   try {
+    const articulo_id = positiveId(req.body?.articulo_id, 'Artículo');
     const cliente = db.prepare('SELECT id FROM clientes WHERE email = ?').get(req.user.email);
     if (!cliente) return res.status(400).json({ error: 'Perfil de cliente no encontrado' });
 
@@ -779,7 +926,7 @@ app.post('/api/reservas', (req, res) => {
     const info = stmt.run(cliente.id, articulo_id, fechaEstimada);
     res.json({ id: info.lastInsertRowid, fecha_estimada_disponible: fechaEstimada });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -839,6 +986,9 @@ app.get('/api/mis-rentas', (req, res) => {
 app.put('/api/rentas/:id/devolver', (req, res) => {
   const { fecha_devolucion_real, comentario } = req.body;
   try {
+    validateDateRange(fecha_devolucion_real, fecha_devolucion_real);
+    if (!fecha_devolucion_real) throw new ValidationError(['Fecha de devolución es obligatoria']);
+    if (String(comentario || '').length > 1000) throw new ValidationError(['Comentario no puede superar 1000 caracteres']);
     db.transaction(() => {
       const renta = db.prepare(`SELECT articulo_id, estado, fecha_devolucion_prevista, costo_dia, total FROM rentas WHERE id = ?`).get(req.params.id);
       if (!renta || renta.estado !== 'Activa') throw new Error('Renta no encontrada o ya devuelta');
@@ -863,7 +1013,7 @@ app.put('/api/rentas/:id/devolver', (req, res) => {
     })();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -903,31 +1053,91 @@ app.get('/api/dashboard', (req, res) => {
 
 // Consultas
 app.get('/api/consultas', (req, res) => {
-  const { cliente_id, fecha_desde, fecha_hasta, articulo_id, tipo_articulo_id, estado } = req.query;
-  let query = `
-    SELECT r.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido, a.titulo as articulo_titulo, t.descripcion as tipo_articulo
-    FROM rentas r
-    JOIN clientes c ON r.cliente_id = c.id
-    JOIN articulos a ON r.articulo_id = a.id
-    JOIN tipos_articulo t ON a.tipo_articulo_id = t.id
-    WHERE 1=1
-  `;
-  let params = [];
-
-  if (cliente_id) { query += ` AND r.cliente_id = ?`; params.push(cliente_id); }
-  if (fecha_desde) { query += ` AND date(r.fecha_renta) >= date(?)`; params.push(fecha_desde); }
-  if (fecha_hasta) { query += ` AND date(r.fecha_renta) <= date(?)`; params.push(fecha_hasta); }
-  if (articulo_id) { query += ` AND r.articulo_id = ?`; params.push(articulo_id); }
-  if (tipo_articulo_id) { query += ` AND a.tipo_articulo_id = ?`; params.push(tipo_articulo_id); }
-  if (estado && estado !== 'Todos') { query += ` AND r.estado = ?`; params.push(estado); }
-
-  query += ` ORDER BY r.fecha_renta DESC`;
-
   try {
+    const {
+      cliente_id, empleado_id, fecha_desde, fecha_hasta, articulo_id,
+      tipo_articulo_id, genero_id, idioma_id, estado, texto,
+      total_min, total_max, orden = 'fecha_desc', limite = '200'
+    } = req.query;
+
+    validateDateRange(fecha_desde, fecha_hasta);
+    const filters = [];
+    const params = [];
+
+    const addIdFilter = (value, column, label) => {
+      if (!value) return;
+      filters.push(`${column} = ?`);
+      params.push(positiveId(value, label));
+    };
+
+    addIdFilter(cliente_id, 'r.cliente_id', 'Cliente');
+    addIdFilter(empleado_id, 'r.empleado_id', 'Empleado');
+    addIdFilter(articulo_id, 'r.articulo_id', 'Artículo');
+    addIdFilter(tipo_articulo_id, 'a.tipo_articulo_id', 'Tipo de artículo');
+    addIdFilter(genero_id, 'a.genero_id', 'Género');
+    addIdFilter(idioma_id, 'a.idioma_id', 'Idioma');
+
+    if (fecha_desde) { filters.push('date(r.fecha_renta) >= date(?)'); params.push(fecha_desde); }
+    if (fecha_hasta) { filters.push('date(r.fecha_renta) <= date(?)'); params.push(fecha_hasta); }
+
+    if (estado && estado !== 'Todos') {
+      const estados = ['Activa', 'Devuelta', 'Vencida'];
+      if (!estados.includes(estado)) throw new ValidationError(['Estado de renta no válido']);
+      if (estado === 'Vencida') filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')");
+      else { filters.push('r.estado = ?'); params.push(estado); }
+    }
+
+    if (texto) {
+      const term = String(texto).trim();
+      if (term.length > 100) throw new ValidationError(['Búsqueda no puede superar 100 caracteres']);
+      filters.push("(a.titulo LIKE ? OR c.nombre LIKE ? OR c.apellido LIKE ? OR c.email LIKE ? OR e.nombre LIKE ? OR e.apellido LIKE ?)");
+      for (let i = 0; i < 6; i++) params.push(`%${term}%`);
+    }
+
+    const min = total_min === undefined || total_min === '' ? null : Number(total_min);
+    const max = total_max === undefined || total_max === '' ? null : Number(total_max);
+    if (min !== null && (!Number.isFinite(min) || min < 0)) throw new ValidationError(['Total mínimo no es válido']);
+    if (max !== null && (!Number.isFinite(max) || max < 0)) throw new ValidationError(['Total máximo no es válido']);
+    if (min !== null && max !== null && min > max) throw new ValidationError(['Total mínimo no puede ser mayor al máximo']);
+    if (min !== null) { filters.push('r.total >= ?'); params.push(min); }
+    if (max !== null) { filters.push('r.total <= ?'); params.push(max); }
+
+    const orderOptions = {
+      fecha_desc: 'r.fecha_renta DESC, r.id DESC',
+      fecha_asc: 'r.fecha_renta ASC, r.id ASC',
+      total_desc: 'r.total DESC, r.id DESC',
+      total_asc: 'r.total ASC, r.id ASC',
+      cliente_asc: 'c.nombre ASC, c.apellido ASC, r.id DESC'
+    };
+    if (!orderOptions[orden]) throw new ValidationError(['Orden no válido']);
+    const limit = Number(limite);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new ValidationError(['Límite debe estar entre 1 y 500']);
+
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const query = `
+      SELECT r.*, c.nombre as cliente_nombre, c.apellido as cliente_apellido,
+             c.email as cliente_email, a.titulo as articulo_titulo,
+             t.descripcion as tipo_articulo, g.descripcion as genero,
+             i.descripcion as idioma, e.nombre as empleado_nombre,
+             e.apellido as empleado_apellido,
+             CASE WHEN r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')
+                  THEN 'Vencida' ELSE r.estado END as estado_calculado
+      FROM rentas r
+      JOIN clientes c ON r.cliente_id = c.id
+      JOIN articulos a ON r.articulo_id = a.id
+      JOIN tipos_articulo t ON a.tipo_articulo_id = t.id
+      JOIN generos g ON a.genero_id = g.id
+      JOIN idiomas i ON a.idioma_id = i.id
+      JOIN empleados e ON r.empleado_id = e.id
+      ${where}
+      ORDER BY ${orderOptions[orden]}
+      LIMIT ?
+    `;
+    params.push(limit);
     const rows = db.prepare(query).all(...params);
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err);
   }
 });
 
@@ -936,6 +1146,13 @@ app.get('/api/reportes', (req, res) => {
   const { fecha_desde, fecha_hasta, tipo_articulo_id } = req.query;
   let whereClauses = [];
   let params = [];
+
+  try {
+    validateDateRange(fecha_desde, fecha_hasta);
+    if (tipo_articulo_id && tipo_articulo_id !== 'Todos') positiveId(tipo_articulo_id, 'Tipo de artículo');
+  } catch (err) {
+    return sendError(res, err);
+  }
 
   if (fecha_desde) { whereClauses.push(`date(r.fecha_renta) >= date(?)`); params.push(fecha_desde); }
   if (fecha_hasta) { whereClauses.push(`date(r.fecha_renta) <= date(?)`); params.push(fecha_hasta); }

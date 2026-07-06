@@ -25,7 +25,11 @@ const API = {
         try { json = JSON.parse(text); } catch(e) {}
       }
       
-      if (!res.ok) throw new Error(json.error || 'Error del servidor');
+      if (res.status === 403) throw new Error(json.error || 'Tu rol no tiene permiso para esta opción');
+      if (!res.ok) {
+        const details = Array.isArray(json.errors) && json.errors.length > 1 ? `: ${json.errors.join('. ')}` : '';
+        throw new Error((json.error || 'Error del servidor') + details);
+      }
       return json;
     } catch (err) {
       console.error('API Error:', err);

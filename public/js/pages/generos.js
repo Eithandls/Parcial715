@@ -35,7 +35,7 @@ App.registerPage('generos', async (container) => {
         <form onsubmit="event.preventDefault(); window.Generos.save(${id || 'null'})">
           <div class="form-group">
             <label>Descripción del Género</label>
-            <input type="text" id="genero-desc" class="form-control" required value="${data.descripcion}" placeholder="Ej: Acción, Comedia">
+            <input type="text" id="genero-desc" class="form-control" required minlength="2" maxlength="60" value="${data.descripcion}" placeholder="Ej: Acción, Comedia">
           </div>
           <div class="form-group">
             <label>Estado</label>

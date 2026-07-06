@@ -70,7 +70,7 @@ App.registerPage('peliculas', async (container) => {
             </h4>
             <div class="form-group">
               <label>Título</label>
-              <input type="text" id="new-titulo" class="form-control" required>
+              <input type="text" id="new-titulo" class="form-control" required maxlength="160">
             </div>
             <div class="form-group">
               <label>Género</label>
@@ -82,16 +82,16 @@ App.registerPage('peliculas', async (container) => {
             <div class="grid-2">
               <div class="form-group">
                 <label>Duración (min)</label>
-                <input type="number" id="new-duracion" class="form-control">
+                <input type="number" id="new-duracion" class="form-control" min="1" max="1000">
               </div>
               <div class="form-group">
                 <label>Año</label>
-                <input type="number" id="new-anio" class="form-control">
+                <input type="number" id="new-anio" class="form-control" min="1888" max="${new Date().getFullYear() + 5}">
               </div>
             </div>
             <div class="form-group">
               <label>Sinopsis</label>
-              <textarea id="new-sinopsis" class="form-control" rows="2"></textarea>
+              <textarea id="new-sinopsis" class="form-control" rows="2" maxlength="2000"></textarea>
             </div>
 
             <hr style="margin:16px 0; border:none; border-top:1px solid var(--outline-variant);">
@@ -119,7 +119,7 @@ App.registerPage('peliculas', async (container) => {
                 </div>
                 <div class="form-group" style="width:100px; margin:0;">
                   <label style="font-size:12px;">Precio/día</label>
-                  <input type="number" class="form-control fmt-precio" value="100" min="0" required>
+                  <input type="number" class="form-control fmt-precio" value="100" min="0.01" step="0.01" required>
                 </div>
               </div>
             </div>
@@ -135,11 +135,11 @@ App.registerPage('peliculas', async (container) => {
             <div class="grid-2">
               <div class="form-group">
                 <label>Director(es) — separados por coma</label>
-                <textarea id="new-elenco-director" class="form-control" rows="2" placeholder="Ej: Christopher Nolan, Steven Spielberg"></textarea>
+                <textarea id="new-elenco-director" class="form-control" rows="2" maxlength="1000" placeholder="Ej: Christopher Nolan, Steven Spielberg"></textarea>
               </div>
               <div class="form-group">
                 <label>Reparto — separados por coma</label>
-                <textarea id="new-elenco-reparto" class="form-control" rows="4" placeholder="Ej: Leonardo DiCaprio, Tom Hanks, Morgan Freeman"></textarea>
+                <textarea id="new-elenco-reparto" class="form-control" rows="4" maxlength="2000" placeholder="Ej: Leonardo DiCaprio, Tom Hanks, Morgan Freeman"></textarea>
               </div>
             </div>
 
@@ -158,8 +158,8 @@ App.registerPage('peliculas', async (container) => {
       const formatos = Array.from(formatRows).map(row => ({
         tipo_articulo_id: parseInt(row.querySelector('.fmt-tipo').value),
         idioma_id: parseInt(row.querySelector('.fmt-idioma').value),
-        cantidad_disponible: parseInt(row.querySelector('.fmt-stock').value) || 1,
-        costo_dia: parseFloat(row.querySelector('.fmt-precio').value) || 0
+        cantidad_disponible: Number(row.querySelector('.fmt-stock').value),
+        costo_dia: Number(row.querySelector('.fmt-precio').value)
       }));
 
       const data = {
@@ -200,7 +200,7 @@ App.registerPage('peliculas', async (container) => {
           <input type="number" class="form-control fmt-stock" value="2" min="0">
         </div>
         <div class="form-group" style="width:100px; margin:0;">
-          <input type="number" class="form-control fmt-precio" value="100" min="0" required>
+          <input type="number" class="form-control fmt-precio" value="100" min="0.01" step="0.01" required>
         </div>
         <button type="button" class="btn btn-icon text-error" onclick="this.parentElement.remove()" style="margin-bottom:4px;">
           <span class="material-symbols-outlined">remove_circle</span>

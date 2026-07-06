@@ -8,6 +8,7 @@ if (fs.existsSync(dbPath)) {
 }
 
 const { db, initDB } = require('./database');
+const { hashPassword } = require('./security');
 initDB();
 
 console.log('Seeding database with demo data...');
@@ -15,8 +16,10 @@ console.log('Seeding database with demo data...');
 db.transaction(() => {
   // Usuarios demo para clientes registrados (deben coincidir email con tabla clientes)
   const insertUsuario = db.prepare(`INSERT INTO usuarios (username, password, nombre, email, rol) VALUES (?, ?, ?, ?, ?)`);
-  insertUsuario.run('carlos', 'carlos1', 'Carlos Pérez', 'carlos@email.com', 'cliente');
-  insertUsuario.run('maria', 'maria1', 'María Gómez', 'maria@email.com', 'cliente');
+  insertUsuario.run('admin', hashPassword('1234'), 'Administrador', 'admin@cinemaclub.com', 'admin');
+  insertUsuario.run('empleado', hashPassword('empleado1'), 'Operador Cinema Club', 'empleado@cinemaclub.com', 'empleado');
+  insertUsuario.run('carlos', hashPassword('carlos1'), 'Carlos Pérez', 'carlos@email.com', 'cliente');
+  insertUsuario.run('maria', hashPassword('maria1'), 'María Gómez', 'maria@email.com', 'cliente');
 
   // Tipos de Articulo
   const insertTipo = db.prepare(`INSERT INTO tipos_articulo (descripcion) VALUES (?)`);

@@ -3,6 +3,7 @@ const path = require('path');
 
 const dbPath = path.join(__dirname, 'cinema_club.db');
 const db = new Database(dbPath);
+db.pragma('foreign_keys = ON');
 
 function initDB() {
   db.exec(`

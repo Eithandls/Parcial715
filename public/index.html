@@ -27,14 +27,14 @@
           <label>Usuario</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">person</span>
-            <input type="text" id="login-username" required placeholder="Tu usuario">
+            <input type="text" id="login-username" required minlength="3" maxlength="30" autocomplete="username" placeholder="Tu usuario">
           </div>
         </div>
         <div class="form-group">
           <label>Contraseña</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">lock</span>
-            <input type="password" id="login-password" required placeholder="Tu contraseña">
+            <input type="password" id="login-password" required minlength="4" maxlength="72" autocomplete="current-password" placeholder="Tu contraseña">
           </div>
         </div>
         <div id="login-error" class="text-error mb-sm text-center font-semibold"></div>
@@ -57,14 +57,14 @@
           <label>Nombre Completo</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">badge</span>
-            <input type="text" id="reg-nombre" required placeholder="Ej: Juan Pérez">
+            <input type="text" id="reg-nombre" required minlength="3" maxlength="120" autocomplete="name" placeholder="Ej: Juan Pérez">
           </div>
         </div>
         <div class="form-group">
           <label>Correo Electrónico</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">mail</span>
-            <input type="email" id="reg-email" required placeholder="tu@correo.com">
+            <input type="email" id="reg-email" required maxlength="160" autocomplete="email" placeholder="tu@correo.com">
           </div>
         </div>
         <div class="grid-2" style="gap:12px;">
@@ -72,14 +72,14 @@
             <label>Cédula</label>
             <div class="input-with-icon">
               <span class="material-symbols-outlined">badge</span>
-              <input type="text" id="reg-cedula" placeholder="000-0000000-0">
+              <input type="text" id="reg-cedula" pattern="[0-9]{3}-[0-9]{7}-[0-9]" maxlength="13" placeholder="000-0000000-0">
             </div>
           </div>
           <div class="form-group">
             <label>Teléfono</label>
             <div class="input-with-icon">
               <span class="material-symbols-outlined">phone</span>
-              <input type="text" id="reg-telefono" placeholder="809-000-0000">
+              <input type="tel" id="reg-telefono" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}" maxlength="12" placeholder="809-000-0000">
             </div>
           </div>
         </div>
@@ -87,14 +87,14 @@
           <label>Usuario</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">person</span>
-            <input type="text" id="reg-username" required placeholder="Elige un usuario">
+            <input type="text" id="reg-username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9._-]+" autocomplete="username" placeholder="Elige un usuario">
           </div>
         </div>
         <div class="form-group">
           <label>Contraseña</label>
           <div class="input-with-icon">
             <span class="material-symbols-outlined">lock</span>
-            <input type="password" id="reg-password" required placeholder="Tu contraseña">
+            <input type="password" id="reg-password" required minlength="6" maxlength="72" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
           </div>
         </div>
         <input type="hidden" name="reg-rol" value="cliente">

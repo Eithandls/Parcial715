@@ -39,33 +39,33 @@ App.registerPage('clientes', async (container) => {
           <div class="grid-2 mb-sm">
             <div class="form-group">
               <label>Nombre</label>
-              <input type="text" id="cli-nombre" class="form-control" required value="${data.nombre}">
+              <input type="text" id="cli-nombre" class="form-control" required minlength="2" maxlength="80" value="${data.nombre}">
             </div>
             <div class="form-group">
               <label>Apellido</label>
-              <input type="text" id="cli-apellido" class="form-control" required value="${data.apellido}">
+              <input type="text" id="cli-apellido" class="form-control" required minlength="2" maxlength="80" value="${data.apellido}">
             </div>
           </div>
           
           <div class="grid-2 mb-sm">
             <div class="form-group">
               <label>Cédula</label>
-              <input type="text" id="cli-cedula" class="form-control" value="${data.cedula || ''}" placeholder="xxx-xxxxxxx-x">
+              <input type="text" id="cli-cedula" class="form-control" pattern="[0-9]{3}-[0-9]{7}-[0-9]" maxlength="13" value="${data.cedula || ''}" placeholder="000-0000000-0">
             </div>
             <div class="form-group">
               <label>Teléfono</label>
-              <input type="tel" id="cli-telefono" class="form-control" value="${data.telefono || ''}">
+              <input type="tel" id="cli-telefono" class="form-control" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}" maxlength="12" value="${data.telefono || ''}" placeholder="809-000-0000">
             </div>
           </div>
 
           <div class="form-group">
             <label>Email</label>
-            <input type="email" id="cli-email" class="form-control" value="${data.email || ''}">
+            <input type="email" id="cli-email" class="form-control" maxlength="160" value="${data.email || ''}">
           </div>
 
           <div class="form-group">
             <label>Dirección</label>
-            <textarea id="cli-direccion" class="form-control" rows="2">${data.direccion || ''}</textarea>
+            <textarea id="cli-direccion" class="form-control" rows="2" maxlength="240">${data.direccion || ''}</textarea>
           </div>
 
           <div class="grid-2 mb-sm">

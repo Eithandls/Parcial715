@@ -3,6 +3,7 @@ const Components = {
     const sidebar = document.getElementById('sidebar');
     const user = App.user || {};
     const isCliente = user.rol === 'cliente';
+    const isAdmin = user.rol === 'admin';
 
     let navItems = [];
     if (isCliente) {
@@ -19,11 +20,11 @@ const Components = {
         { id: 'articulos', icon: 'inventory_2', label: 'Artículos' },
         { id: 'musica', icon: 'music_note', label: 'Música' },
         { id: 'clientes', icon: 'people', label: 'Clientes' },
-        { id: 'empleados', icon: 'badge', label: 'Empleados' },
+        ...(isAdmin ? [{ id: 'empleados', icon: 'badge', label: 'Empleados' }] : []),
         { id: 'rentas', icon: 'shopping_cart', label: 'Rentas y Devoluciones' },
         { id: 'reservas', icon: 'event_available', label: 'Reservas' },
         { id: 'consultas', icon: 'search', label: 'Consultas' },
-        { id: 'reportes', icon: 'bar_chart', label: 'Reportes' }
+        ...(isAdmin ? [{ id: 'reportes', icon: 'bar_chart', label: 'Reportes' }] : [])
       ];
     }
 
