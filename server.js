@@ -1232,12 +1232,15 @@ app.get('/api/consultas', (req, res) => {
       }
     }
 
-    if (texto) {
-      const term = String(texto).trim();
-      if (term.length > 100) throw new ValidationError(['Búsqueda no puede superar 100 caracteres']);
-      filters.push("(a.titulo LIKE ? OR c.nombre LIKE ? OR c.apellido LIKE ? OR c.email LIKE ? OR e.nombre LIKE ? OR e.apellido LIKE ?)");
-      for (let i = 0; i < 6; i++) params.push(`%${term}%`);
-    }
+    const normalizeSearch = value => String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    const searchTerm = texto ? String(texto).trim() : '';
+    if (searchTerm.length > 100) throw new ValidationError(['Búsqueda no puede superar 100 caracteres']);
+    const searchWords = normalizeSearch(searchTerm).split(' ').filter(Boolean);
 
     const min = total_min === undefined || total_min === '' ? null : Number(total_min);
     const max = total_max === undefined || total_max === '' ? null : Number(total_max);
@@ -1276,10 +1279,34 @@ app.get('/api/consultas', (req, res) => {
       JOIN empleados e ON r.empleado_id = e.id
       ${where}
       ORDER BY ${orderOptions[orden]}
-      LIMIT ?
     `;
-    params.push(limit);
-    const rows = db.prepare(query).all(...params);
+    let rows = db.prepare(query).all(...params);
+    if (searchWords.length) {
+      rows = rows.filter(row => {
+        const searchable = normalizeSearch([
+          row.id,
+          row.cliente_nombre,
+          row.cliente_apellido,
+          `${row.cliente_nombre} ${row.cliente_apellido}`,
+          `${row.cliente_apellido} ${row.cliente_nombre}`,
+          row.cliente_email,
+          row.articulo_titulo,
+          row.tipo_articulo,
+          row.genero,
+          row.idioma,
+          row.empleado_nombre,
+          row.empleado_apellido,
+          `${row.empleado_nombre} ${row.empleado_apellido}`,
+          `${row.empleado_apellido} ${row.empleado_nombre}`,
+          row.estado_calculado,
+          row.fecha_renta,
+          row.fecha_devolucion_prevista,
+          row.total
+        ].join(' '));
+        return searchWords.every(word => searchable.includes(word));
+      });
+    }
+    rows = rows.slice(0, limit);
     res.json(rows);
   } catch (err) {
     sendError(res, err);
