@@ -357,15 +357,15 @@ app.get('/api/peliculas/completo', (req, res) => {
       }
     }
 
-    const result = peliculas.map(p => ({
-      ...p,
-      articulos: (articleMap[p.id] || []).filter(a => {
-        if (tipo_id && a.tipo_articulo_id != tipo_id) return false;
-        if (idioma_id && a.idioma_id != idioma_id) return false;
-        return true;
-      }),
-      elenco: elencoMap[p.id] || []
-    }));
+    const result = peliculas
+      .map(p => ({
+        ...p,
+        articulos: articleMap[p.id] || [],
+        elenco: elencoMap[p.id] || []
+      }))
+      // If format or language is selected, the title must have at least one
+      // physical article matching the complete combination of active filters.
+      .filter(p => (!tipo_id && !idioma_id) || p.articulos.length > 0);
 
     res.json(result);
   } catch (err) {
@@ -1221,8 +1221,14 @@ app.get('/api/consultas', (req, res) => {
     if (estado && estado !== 'Todos') {
       const estados = ['Activa', 'Devuelta', 'Vencida'];
       if (!estados.includes(estado)) throw new ValidationError(['Estado de renta no válido']);
-      if (estado === 'Vencida') filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')");
-      else { filters.push('r.estado = ?'); params.push(estado); }
+      if (estado === 'Vencida') {
+        filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')");
+      } else if (estado === 'Activa') {
+        filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) >= date('now')");
+      } else {
+        filters.push('r.estado = ?');
+        params.push(estado);
+      }
     }
 
     if (texto) {
