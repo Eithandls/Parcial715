@@ -13,6 +13,79 @@ App.registerPage('consultas', async (container) => {
     Components.showToast('No se pudieron cargar todos los filtros', 'error');
   }
 
+  const activos = rows => rows.filter(row => row.estado !== 'Eliminado' && row.estado !== 'Inactivo');
+  clientes = activos(clientes);
+  articulos = activos(articulos);
+  tipos = activos(tipos);
+  empleados = activos(empleados);
+  generos = activos(generos);
+  idiomas = activos(idiomas);
+
+  const escapeHTML = value => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+
+  const getValue = id => document.getElementById(id)?.value || '';
+  const setSelectOptions = (id, rows, label, placeholder = 'Todos') => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = `<option value="">${placeholder}</option>` + rows
+      .map(row => `<option value="${row.id}">${escapeHTML(label(row))}</option>`)
+      .join('');
+    if (current && rows.some(row => String(row.id) === String(current))) {
+      select.value = current;
+    }
+  };
+
+  const matchingArticles = () => {
+    const tipo = getValue('q-tipo');
+    const genero = getValue('q-genero');
+    const idioma = getValue('q-idioma');
+    return articulos.filter(articulo => {
+      if (tipo && String(articulo.tipo_articulo_id) !== String(tipo)) return false;
+      if (genero && String(articulo.genero_id) !== String(genero)) return false;
+      if (idioma && String(articulo.idioma_id) !== String(idioma)) return false;
+      return true;
+    });
+  };
+
+  const articleLabel = articulo => {
+    const tipo = tipos.find(row => row.id === articulo.tipo_articulo_id)?.descripcion || 'Sin formato';
+    const genero = generos.find(row => row.id === articulo.genero_id)?.descripcion || 'Sin género';
+    const idioma = idiomas.find(row => row.id === articulo.idioma_id)?.descripcion || 'Sin idioma';
+    return `${articulo.titulo} — ${tipo}, ${genero}, ${idioma}`;
+  };
+
+  const syncArticleFilter = () => {
+    const select = document.getElementById('q-articulo');
+    if (!select) return;
+    const filtered = matchingArticles();
+    const previous = select.value;
+    setSelectOptions('q-articulo', filtered, articleLabel);
+    if (previous && !filtered.some(articulo => String(articulo.id) === String(previous))) {
+      select.value = '';
+      Components.showToast('Quité el artículo porque no coincide con los filtros elegidos', 'error');
+    }
+    const counter = document.getElementById('q-articulos-count');
+    if (counter) counter.textContent = `${filtered.length} artículo${filtered.length === 1 ? '' : 's'} coinciden`;
+  };
+
+  const syncAttributeFiltersFromArticle = () => {
+    const articuloId = getValue('q-articulo');
+    if (!articuloId) return;
+    const articulo = articulos.find(row => String(row.id) === String(articuloId));
+    if (!articulo) return;
+    document.getElementById('q-tipo').value = articulo.tipo_articulo_id || '';
+    document.getElementById('q-genero').value = articulo.genero_id || '';
+    document.getElementById('q-idioma').value = articulo.idioma_id || '';
+    syncArticleFilter();
+    document.getElementById('q-articulo').value = articuloId;
+  };
+
   window.Consultas = {
     lastResults: [],
 
@@ -43,9 +116,11 @@ App.registerPage('consultas', async (container) => {
       if (params.fecha_desde && params.fecha_hasta && params.fecha_desde > params.fecha_hasta) {
         throw new Error('La fecha desde no puede ser posterior a la fecha hasta');
       }
-      if (params.total_min !== undefined && Number(params.total_min) < 0) throw new Error('El total mínimo no puede ser negativo');
-      if (params.total_max !== undefined && Number(params.total_max) < 0) throw new Error('El total máximo no puede ser negativo');
-      if (params.total_min !== undefined && params.total_max !== undefined && Number(params.total_min) > Number(params.total_max)) {
+      const totalMin = params.total_min !== undefined ? Number(params.total_min) : null;
+      const totalMax = params.total_max !== undefined ? Number(params.total_max) : null;
+      if (totalMin !== null && (!Number.isFinite(totalMin) || totalMin < 0)) throw new Error('El total mínimo no es válido');
+      if (totalMax !== null && (!Number.isFinite(totalMax) || totalMax < 0)) throw new Error('El total máximo no es válido');
+      if (totalMin !== null && totalMax !== null && totalMin > totalMax) {
         throw new Error('El total mínimo no puede ser mayor al máximo');
       }
     },
@@ -70,13 +145,14 @@ App.registerPage('consultas', async (container) => {
 
         const columns = [
           { key: 'id', label: 'Renta', render: value => `<b>#${value}</b>` },
-          { key: 'cliente_nombre', label: 'Cliente', render: (value, row) => `${value} ${row.cliente_apellido}` },
-          { key: 'articulo_titulo', label: 'Artículo' },
-          { key: 'tipo_articulo', label: 'Formato' },
-          { key: 'genero', label: 'Género' },
-          { key: 'idioma', label: 'Idioma' },
-          { key: 'empleado_nombre', label: 'Empleado', render: (value, row) => `${value} ${row.empleado_apellido}` },
+          { key: 'cliente_nombre', label: 'Cliente', render: (value, row) => escapeHTML(`${value} ${row.cliente_apellido}`) },
+          { key: 'articulo_titulo', label: 'Artículo', render: escapeHTML },
+          { key: 'tipo_articulo', label: 'Formato', render: escapeHTML },
+          { key: 'genero', label: 'Género', render: escapeHTML },
+          { key: 'idioma', label: 'Idioma', render: escapeHTML },
+          { key: 'empleado_nombre', label: 'Empleado', render: (value, row) => escapeHTML(`${value} ${row.empleado_apellido}`) },
           { key: 'fecha_renta', label: 'Fecha renta', render: Components.formatDate },
+          { key: 'fecha_devolucion_prevista', label: 'Dev. prevista', render: Components.formatDate },
           { key: 'estado_calculado', label: 'Estado', render: Components.badge },
           { key: 'total', label: 'Total', render: Components.formatCurrency }
         ];
@@ -90,6 +166,7 @@ App.registerPage('consultas', async (container) => {
 
     limpiar() {
       document.getElementById('consultas-form').reset();
+      syncArticleFilter();
       this.buscar();
     },
 
@@ -111,7 +188,7 @@ App.registerPage('consultas', async (container) => {
     }
   };
 
-  const options = (rows, label) => rows.map(row => `<option value="${row.id}">${label(row)}</option>`).join('');
+  const options = (rows, label) => rows.map(row => `<option value="${row.id}">${escapeHTML(label(row))}</option>`).join('');
 
   container.innerHTML = `
     ${Components.pageHeader(
@@ -130,7 +207,7 @@ App.registerPage('consultas', async (container) => {
         <div class="grid-3 mb-md">
           <div class="form-group"><label for="q-cliente">Cliente</label><select id="q-cliente" class="form-control"><option value="">Todos</option>${options(clientes, c => `${c.nombre} ${c.apellido}`)}</select></div>
           <div class="form-group"><label for="q-empleado">Empleado</label><select id="q-empleado" class="form-control"><option value="">Todos</option>${options(empleados, e => `${e.nombre} ${e.apellido}`)}</select></div>
-          <div class="form-group"><label for="q-articulo">Artículo</label><select id="q-articulo" class="form-control"><option value="">Todos</option>${options(articulos, a => a.titulo)}</select></div>
+          <div class="form-group"><label for="q-articulo">Artículo</label><select id="q-articulo" class="form-control"><option value="">Todos</option>${options(articulos, articleLabel)}</select><small id="q-articulos-count" class="text-muted">${articulos.length} artículos coinciden</small></div>
         </div>
 
         <div class="grid-3 mb-md">
@@ -160,6 +237,11 @@ App.registerPage('consultas', async (container) => {
 
     <div id="consultas-results">${Components.loading()}</div>
   `;
+
+  ['q-tipo', 'q-genero', 'q-idioma'].forEach(id => {
+    document.getElementById(id).addEventListener('change', syncArticleFilter);
+  });
+  document.getElementById('q-articulo').addEventListener('change', syncAttributeFiltersFromArticle);
 
   window.Consultas.buscar();
 });

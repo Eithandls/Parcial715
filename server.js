@@ -1201,9 +1201,10 @@ app.get('/api/consultas', (req, res) => {
     validateDateRange(fecha_desde, fecha_hasta);
     const filters = [];
     const params = [];
+    const todaySql = "date('now','localtime')";
 
     const addIdFilter = (value, column, label) => {
-      if (!value) return;
+      if (!value || value === 'Todos') return;
       filters.push(`${column} = ?`);
       params.push(positiveId(value, label));
     };
@@ -1222,9 +1223,9 @@ app.get('/api/consultas', (req, res) => {
       const estados = ['Activa', 'Devuelta', 'Vencida'];
       if (!estados.includes(estado)) throw new ValidationError(['Estado de renta no válido']);
       if (estado === 'Vencida') {
-        filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')");
+        filters.push(`r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < ${todaySql}`);
       } else if (estado === 'Activa') {
-        filters.push("r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) >= date('now')");
+        filters.push(`r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) >= ${todaySql}`);
       } else {
         filters.push('r.estado = ?');
         params.push(estado);
@@ -1264,7 +1265,7 @@ app.get('/api/consultas', (req, res) => {
              t.descripcion as tipo_articulo, g.descripcion as genero,
              i.descripcion as idioma, e.nombre as empleado_nombre,
              e.apellido as empleado_apellido,
-             CASE WHEN r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < date('now')
+             CASE WHEN r.estado = 'Activa' AND date(r.fecha_devolucion_prevista) < ${todaySql}
                   THEN 'Vencida' ELSE r.estado END as estado_calculado
       FROM rentas r
       JOIN clientes c ON r.cliente_id = c.id
