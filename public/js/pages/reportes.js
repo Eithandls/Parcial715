@@ -44,9 +44,7 @@ App.registerPage('reportes', async (container) => {
         html += `<div class="card">
           <div class="page-header" style="margin-bottom:16px;">
             <h3 style="font-size:18px; color:var(--on-surface);">Detalle de Transacciones</h3>
-            <button class="btn btn-outline" onclick="window.Reportes.exportCSV()">
-              <span class="material-symbols-outlined">download</span> Exportar CSV
-            </button>
+            ${Components.exportButtons('window.Reportes.exportar')}
           </div>
           ${Components.dataTable(columns, res.data)}
         </div>`;
@@ -57,34 +55,42 @@ App.registerPage('reportes', async (container) => {
       }
     },
 
-    exportCSV() {
-      if (!currentData || currentData.length === 0) return Components.showToast('No hay datos para exportar', 'error');
+    exportar(format = 'pdf') {
+      if (!currentData || currentData.length === 0) {
+        return Components.showToast('No hay datos para exportar', 'error');
+      }
 
-      const headers = ['ID Renta', 'Fecha Renta', 'Cliente', 'Articulo', 'Tipo', 'Dias', 'Total (RD$)'];
-      const rows = currentData.map(r => [
-        r.id,
-        r.fecha_renta.split('T')[0],
-        `"${r.cliente_nombre} ${r.cliente_apellido}"`,
-        `"${r.articulo_titulo}"`,
-        `"${r.tipo_articulo}"`,
-        r.dias,
-        r.total
-      ]);
+      const desde = document.getElementById('rep-desde').value;
+      const hasta = document.getElementById('rep-hasta').value;
 
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(e => e.join(','))
-      ].join('\n');
+      const title = 'Reporte Financiero de Rentas';
+      const subtitle = `Período: ${desde} al ${hasta}`;
+      const filename = `reporte_financiero_${desde}_al_${hasta}.${format}`;
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `reporte_rentas_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const summary = [
+        { label: 'Total de Rentas', value: currentData.length.toString() },
+        { label: 'Ingresos Totales', value: Components.formatCurrency(currentData.reduce((s, r) => s + (r.total || 0), 0)) }
+      ];
+
+      const columns = [
+        { key: 'id', label: 'ID Renta' },
+        { key: 'fecha_renta', label: 'Fecha Renta', render: Components.formatDate },
+        { key: 'cliente_nombre', label: 'Cliente', render: (v, r) => `${v} ${r.cliente_apellido}` },
+        { key: 'articulo_titulo', label: 'Artículo' },
+        { key: 'tipo_articulo', label: 'Tipo' },
+        { key: 'dias', label: 'Días' },
+        { key: 'total', label: 'Ingreso (RD$)', render: Components.formatCurrency }
+      ];
+
+      if (format === 'pdf') {
+        Exporters.toPDF({ title, subtitle, summary, columns, data: currentData, filename });
+      } else if (format === 'xls') {
+        Exporters.toXLS({ title, summary, columns, data: currentData, filename });
+      } else if (format === 'xml') {
+        Exporters.toXML({ title, summary, columns, data: currentData, filename });
+      } else if (format === 'csv') {
+        Exporters.toCSV({ columns, data: currentData, filename });
+      }
     }
   };
 

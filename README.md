@@ -52,7 +52,9 @@ El servidor corre en `http://localhost:3000`.
 │   └── js/
 │       ├── api.js     # Cliente HTTP con auth
 │       ├── app.js     # Router SPA
-│       ├── components.js # UI (sidebar, modales, tablas)
+│       ├── components.js # UI (sidebar, modales, tablas, botones de exportación)
+│       ├── validators.js  # Validación de cédula dominicana y tarjetas de crédito (Luhn)
+│       ├── exporters.js   # Exportación a PDF, Excel, XML y CSV con formato profesional
 │       └── pages/     # Módulos
 └── cinema_club.db     # Base de datos SQLite
 ```
@@ -87,11 +89,15 @@ El servidor corre en `http://localhost:3000`.
 
 - **Películas con múltiples formatos**: Una película puede tener varias variantes (DVD, Blu-ray, CD) en diferentes idiomas, cada una con su propio precio y stock
 - **Elenco por texto**: Al crear o editar una película, se escribe el director y reparto separados por coma; el sistema busca o crea automáticamente los registros
-- **Pago con tarjeta**: Al rentar, el cliente ingresa datos de tarjeta (simulado) y recibe un mensaje para pasar a buscar el artículo
+- **Método de pago en rentas (admin/empleado)**: Al registrar una renta desde el panel administrativo, se puede elegir entre **Efectivo** o **Tarjeta**; los campos de tarjeta solo se validan cuando se selecciona ese método
+- **Pago con tarjeta (catálogo cliente)**: Al rentar desde el catálogo, el cliente ingresa datos de tarjeta (simulado) y recibe un mensaje para pasar a buscar el artículo
+- **Validación de tarjeta (algoritmo Luhn)**: Los números de tarjeta se validan con el algoritmo de Luhn y el formato se auto-formatea en grupos de 4 dígitos
 - **Reservas**: Si un artículo no está disponible, el cliente puede reservarlo
 - **Devolución con penalidad**: Si se devuelve tarde, se aplica un recargo del 50% por día adicional
 - **Filtros**: Búsqueda por título, género, formato e idioma con botón de búsqueda
-- **Consultas flexibles**: Combina texto, cliente, empleado, artículo, formato, género, idioma, fechas, montos y estado; permite ordenar y exportar a CSV
+- **Consultas flexibles**: Combina texto, cliente, empleado, artículo, formato, género, idioma, fechas, montos y estado; permite ordenar y exportar
+- **Exportación múltiple**: Todos los listados (rentas activas, dashboard, consultas, reportes) permiten exportar a **PDF, Excel (.xls), XML y CSV** con diseño corporativo
+- **Comprobante de renta**: Al registrar una renta se genera un comprobante descargable en PDF, Excel o XML con los detalles de la transacción
 
 ## Base de datos
 

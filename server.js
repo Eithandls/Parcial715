@@ -974,6 +974,7 @@ app.post('/api/rentas', (req, res) => {
     ensureReference('clientes', clienteId, 'Cliente');
     ensureReference('empleados', empleadoId, 'Empleado');
 
+    let rentalId;
     db.transaction(() => {
       const articulo = db.prepare(`SELECT costo_dia, cantidad_disponible FROM articulos WHERE id = ? AND estado = 'Activo'`).get(articuloId);
       if (!articulo || articulo.cantidad_disponible <= 0) throw new ValidationError(['Artículo no disponible']);
@@ -984,11 +985,12 @@ app.post('/api/rentas', (req, res) => {
       const total = dias * articulo.costo_dia;
 
       const stmt = db.prepare(`INSERT INTO rentas (cliente_id, empleado_id, articulo_id, fecha_renta, fecha_devolucion_prevista, costo_dia, dias, total, estado, comentario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Activa', ?)`);
-      stmt.run(clienteId, empleadoId, articuloId, fecha_renta, fecha_devolucion_prevista, articulo.costo_dia, dias, total, String(comentario || '').trim() || null);
+      const info = stmt.run(clienteId, empleadoId, articuloId, fecha_renta, fecha_devolucion_prevista, articulo.costo_dia, dias, total, String(comentario || '').trim() || null);
+      rentalId = info.lastInsertRowid;
       
       db.prepare(`UPDATE articulos SET cantidad_disponible = cantidad_disponible - 1 WHERE id = ?`).run(articuloId);
     })();
-    res.json({ success: true });
+    res.json({ success: true, id: rentalId });
   } catch (err) {
     sendError(res, err);
   }

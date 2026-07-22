@@ -170,21 +170,43 @@ App.registerPage('consultas', async (container) => {
       this.buscar();
     },
 
-    exportar() {
-      if (!this.lastResults.length) return Components.showToast('No hay resultados para exportar', 'error');
-      const headers = ['Renta', 'Cliente', 'Artículo', 'Formato', 'Género', 'Idioma', 'Empleado', 'Fecha', 'Estado', 'Total'];
-      const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-      const rows = this.lastResults.map(row => [
-        row.id, `${row.cliente_nombre} ${row.cliente_apellido}`, row.articulo_titulo,
-        row.tipo_articulo, row.genero, row.idioma, `${row.empleado_nombre} ${row.empleado_apellido}`,
-        row.fecha_renta, row.estado_calculado, row.total
-      ].map(quote).join(','));
-      const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `consulta_rentas_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
+    exportar(format = 'pdf') {
+      if (!this.lastResults || !this.lastResults.length) {
+        return Components.showToast('No hay resultados para exportar', 'error');
+      }
+
+      const title = 'Consulta Flexible de Rentas';
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `consulta_rentas_${dateStr}.${format}`;
+
+      const totalMonto = this.lastResults.reduce((sum, r) => sum + Number(r.total || 0), 0);
+      const summary = [
+        { label: 'Total Registros', value: this.lastResults.length.toString() },
+        { label: 'Monto Acumulado', value: Components.formatCurrency(totalMonto) }
+      ];
+
+      const columns = [
+        { key: 'id', label: 'Renta' },
+        { key: 'cliente_nombre', label: 'Cliente', render: (v, r) => `${v} ${r.cliente_apellido}` },
+        { key: 'articulo_titulo', label: 'Artículo' },
+        { key: 'tipo_articulo', label: 'Formato' },
+        { key: 'genero', label: 'Género' },
+        { key: 'idioma', label: 'Idioma' },
+        { key: 'empleado_nombre', label: 'Empleado', render: (v, r) => `${v} ${r.empleado_apellido}` },
+        { key: 'fecha_renta', label: 'Fecha', render: Components.formatDate },
+        { key: 'estado_calculado', label: 'Estado' },
+        { key: 'total', label: 'Total', render: Components.formatCurrency }
+      ];
+
+      if (format === 'pdf') {
+        Exporters.toPDF({ title, subtitle: `Registros encontrados: ${this.lastResults.length}`, summary, columns, data: this.lastResults, filename });
+      } else if (format === 'xls') {
+        Exporters.toXLS({ title, summary, columns, data: this.lastResults, filename });
+      } else if (format === 'xml') {
+        Exporters.toXML({ title, summary, columns, data: this.lastResults, filename });
+      } else if (format === 'csv') {
+        Exporters.toCSV({ columns, data: this.lastResults, filename });
+      }
     }
   };
 
@@ -194,7 +216,7 @@ App.registerPage('consultas', async (container) => {
     ${Components.pageHeader(
       'Consultas flexibles',
       'Combina filtros, ordena resultados y exporta la información que necesites',
-      '<button class="btn btn-outline" onclick="window.Consultas.exportar()"><span class="material-symbols-outlined">download</span> Exportar CSV</button>'
+      Components.exportButtons('window.Consultas.exportar')
     )}
 
     <div class="card mb-lg">

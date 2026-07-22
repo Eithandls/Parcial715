@@ -171,27 +171,8 @@ async function catalogoPage(container, filtroInicial) {
             </div>
           </div>
           <hr style="margin:12px 0; border:none; border-top:1px solid var(--outline-variant);">
-          <h5 style="margin-bottom:8px; color:var(--primary);">Método de Pago</h5>
-          <div class="grid-2">
-            <div class="form-group" style="margin:0;">
-              <label style="font-size:12px;">Nombre en la Tarjeta</label>
-              <input type="text" id="cat-card-name" class="form-control" placeholder="Titular" required>
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label style="font-size:12px;">Número de Tarjeta</label>
-              <input type="text" id="cat-card-number" class="form-control" placeholder="0000 0000 0000 0000" maxlength="19" required>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:12px;">Vencimiento (MM/AA)</label>
-              <input type="text" id="cat-card-expiry" class="form-control" placeholder="MM/AA" maxlength="5" required>
-            </div>
-            <div class="form-group" style="width:100px; margin:0;">
-              <label style="font-size:12px;">CVV</label>
-              <input type="text" id="cat-card-cvv" class="form-control" placeholder="123" maxlength="4" required>
-            </div>
-          </div>
+          <h5 style="margin-bottom:8px; color:var(--primary);">Método de Pago (Tarjeta Crédito/Débito)</h5>
+          ${Validators.renderCardFields('cat')}
           <div style="margin-top:12px; padding:12px; background:var(--primary-container); border-radius:8px; font-size:13px; color:var(--primary);">
             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span>
             Puede pasar a buscar el artículo rentado cuando quiera dentro del plazo seleccionado.
@@ -324,27 +305,14 @@ async function catalogoPage(container, filtroInicial) {
             </div>
           </div>
           <hr style="margin:12px 0; border:none; border-top:1px solid var(--outline-variant);">
-          <h5 style="margin-bottom:8px; color:var(--primary);">Método de Pago</h5>
-          <div class="grid-2">
-            <div class="form-group" style="margin:0;">
-              <label style="font-size:12px;">Nombre en la Tarjeta</label>
-              <input type="text" id="cat-card-name" class="form-control" placeholder="Titular" required>
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label style="font-size:12px;">Número de Tarjeta</label>
-              <input type="text" id="cat-card-number" class="form-control" placeholder="0000 0000 0000 0000" maxlength="19" required>
-            </div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; color:var(--primary);">
+            <span class="material-symbols-outlined">credit_card</span>
+            <span style="font-weight:600; font-size:15px;">Pago con Tarjeta de Crédito / Débito</span>
           </div>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <div class="form-group" style="flex:1; margin:0;">
-              <label style="font-size:12px;">Vencimiento (MM/AA)</label>
-              <input type="text" id="cat-card-expiry" class="form-control" placeholder="MM/AA" maxlength="5" required>
-            </div>
-            <div class="form-group" style="width:100px; margin:0;">
-              <label style="font-size:12px;">CVV</label>
-              <input type="text" id="cat-card-cvv" class="form-control" placeholder="123" maxlength="4" required>
-            </div>
+          <div style="font-size:12px; color:var(--outline); margin-bottom:12px;">
+            Las rentas en línea requieren pago con tarjeta.
           </div>
+          ${Validators.renderCardFields('cat')}
           <div style="margin-top:12px; padding:12px; background:var(--primary-container); border-radius:8px; font-size:13px; color:var(--primary);">
             <span class="material-symbols-outlined" style="font-size:16px; vertical-align:middle;">info</span>
             Puede pasar a buscar el artículo rentado cuando quiera dentro del plazo seleccionado.
@@ -353,6 +321,8 @@ async function catalogoPage(container, filtroInicial) {
             <span class="material-symbols-outlined">check_circle</span> Confirmar Renta
           </button>
         `;
+        // Apply input masks (card number groups of 4, MM/AA expiry, 3-digit CVV)
+        if (window.Validators) Validators.attachCedulaMasks(actionDiv);
       } else if (fmt) {
         this._selectedArticuloId = fmt.id;
         actionDiv.innerHTML = `
@@ -405,23 +375,34 @@ async function catalogoPage(container, filtroInicial) {
         Components.showToast('La fecha de devolución no puede ser anterior a la fecha de renta', 'error');
         return;
       }
-      // Validate card payment
+
+      // Card payment is mandatory for online/remote rentals
       const cardName = document.getElementById('cat-card-name')?.value?.trim();
       const cardNumber = document.getElementById('cat-card-number')?.value?.trim();
       const cardExpiry = document.getElementById('cat-card-expiry')?.value?.trim();
       const cardCvv = document.getElementById('cat-card-cvv')?.value?.trim();
+
       if (!cardName || !cardNumber || !cardExpiry || !cardCvv) {
-        Components.showToast('Complete los datos de la tarjeta de crédito', 'error');
+        Components.showToast('Complete todos los datos de la tarjeta (titular, número, expiración y CVV)', 'error');
         return;
       }
-      if (cardNumber.replace(/\s/g, '').length < 13) {
-        Components.showToast('Número de tarjeta inválido', 'error');
+      if (!Validators.isValidCardNumber(cardNumber)) {
+        Components.showToast('Número de tarjeta no válido (verifique los 16 dígitos y el dígito verificador)', 'error');
         return;
       }
+      if (!Validators.isValidExpiry(cardExpiry)) {
+        Components.showToast('Fecha de expiración inválida o vencida. Formato: MM/AA', 'error');
+        return;
+      }
+      if (cardCvv.length !== 3) {
+        Components.showToast('El CVV debe tener exactamente 3 dígitos numéricos', 'error');
+        return;
+      }
+
       try {
         await API.request('POST', '/api/rentas/cliente', { articulo_id, fecha_renta, fecha_devolucion_prevista, metodo_pago: 'tarjeta' });
         Components.closeModal();
-        Components.showToast('Pago aprobado. Puede pasar a buscar el artículo rentado cuando quiera dentro del plazo seleccionado.');
+        Components.showToast('Pago aprobado. Puede pasar a buscar el artículo dentro del plazo seleccionado.');
         loadCatalogo();
       } catch (e) {
         Components.showToast(e.message, 'error');

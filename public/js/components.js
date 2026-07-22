@@ -228,5 +228,25 @@ const Components = {
         <span class="material-symbols-outlined spin" style="font-size:48px;">progress_activity</span>
       </div>
     `;
+  },
+
+  exportButtons(callbackName) {
+    return `
+      <div class="export-options" style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span class="text-muted" style="font-size:12px; font-weight:600; margin-right:4px;">Exportar:</span>
+        <button type="button" class="btn btn-outline btn-sm" onclick="${callbackName}('pdf')" title="Exportar a PDF">
+          <span class="material-symbols-outlined" style="font-size:18px; color:#ef4444;">picture_as_pdf</span> PDF
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="${callbackName}('xls')" title="Exportar a Excel (.xls)">
+          <span class="material-symbols-outlined" style="font-size:18px; color:#10b981;">table_chart</span> XLS
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="${callbackName}('xml')" title="Exportar a XML">
+          <span class="material-symbols-outlined" style="font-size:18px; color:#f59e0b;">code</span> XML
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="${callbackName}('csv')" title="Exportar a CSV">
+          <span class="material-symbols-outlined" style="font-size:18px; color:#6366f1;">download</span> CSV
+        </button>
+      </div>
+    `;
   }
 };
